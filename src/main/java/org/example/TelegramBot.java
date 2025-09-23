@@ -14,16 +14,8 @@ public class TelegramBot extends TelegramLongPollingBot{
                 String text = update.getMessage().getText();
                 long chatId = update.getMessage().getChatId();
 
-                String response;
+                String response = new LogicBot().handleCommand(text);
 
-                switch (text){
-                    case "/start":
-                    case "/help":
-                        response = "Привет! Я твой Java-бот 🤖. Я готов повторять за тобой";
-                        break;
-                    default:
-                        response = "Ты написал: " + text;
-                }
                 SendMessage message = new SendMessage();
                 message.setChatId(chatId);
                 message.setText(response);
@@ -43,6 +35,6 @@ public class TelegramBot extends TelegramLongPollingBot{
     //метод который возращает токен бота
     @Override
     public String getBotToken() {
-        return "8295616955:AAHMn1KFNqG2gYxpz0wPK4wrVfhBmmvIhkM";
+        return System.getProperty("TelegramToken");
     }
 }
