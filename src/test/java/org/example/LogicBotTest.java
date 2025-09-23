@@ -19,4 +19,9 @@ class LogicBotTest {
     void testHelpCommand() {
         assertEquals("Привет! Я твой Java-бот 🤖. Я готов повторять за тобой", new LogicBot().handleCommand("/help"));
     }
+
+    @Test
+    void testHelpSecondCommand() {
+        assertEquals("Привет! Я твой Java-бот 🤖. Я готов повторять за тобой", new LogicBot().handleCommand("/hel"));
+    }
 }
