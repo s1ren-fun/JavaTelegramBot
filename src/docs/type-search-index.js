@@ -1,0 +1,1 @@
+typeSearchIndex = [{"l":"All Classes and Interfaces","u":"allclasses-index.html"},{"p":"org.example.bot","l":"LogicBot"},{"p":"org.example.app","l":"Main"},{"p":"org.example.bot","l":"TelegramBot"}];updateSearchResults();
