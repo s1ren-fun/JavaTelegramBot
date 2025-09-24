@@ -1,6 +1,8 @@
 package org.example;
 
-public class LogicBot {
+public class LogicBot implements Logic {
+
+    @Override
     public String handleCommand(String text){
         String response;
 
