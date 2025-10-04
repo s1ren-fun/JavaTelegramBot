@@ -18,17 +18,30 @@ public class LogicBot implements Logic {
      *  @return сформированный ответ бота
      */
     @Override
-    public String handleCommand(String text){
-        String response;
-
-        switch (text){
+    public String handleCommand(String input) {
+        switch (input) {
+            case "Новая заметка":
+                return createNote();
+            case "Список заметок":
+                return listNotes();
+            case "Удалить заметку":
+                return deleteNote();
             case "/start":
-            case "/help":
-                response = "Привет! Я твой Java-бот 🤖. Я готов повторять за тобой";
-                break;
+                return "Привет! Используй меню ниже для работы с заметками.";
             default:
-                response = "Ты написал: " + text;
+                return "Неизвестная команда. Попробуй использовать меню.";
         }
-        return response;
+    }
+
+    public String createNote() {
+        return "Coming soon!";
+    }
+
+    public String listNotes() {
+        return "coming Soon!";
+    }
+
+    public String deleteNote() {
+        return "coming Soon!";
     }
 }
