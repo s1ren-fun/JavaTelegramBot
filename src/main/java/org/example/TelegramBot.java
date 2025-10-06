@@ -3,7 +3,14 @@ package org.example;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
+import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.meta.api.objects.Message;
+
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Класс для основного взаимодействия с API Telegram
@@ -17,6 +24,8 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
  * @since 1.0
  */
 public class TelegramBot extends TelegramLongPollingBot{
+
+    private LogicBot logicBot = new LogicBot();
     /**
      * Обрабатывает входящие сообщения от пользователей.
      * @param update объект {@link Update}, содержащий данные нового сообщения
@@ -26,12 +35,15 @@ public class TelegramBot extends TelegramLongPollingBot{
             if(update.hasMessage() && update.getMessage().hasText()){
                 String text = update.getMessage().getText();
                 long chatId = update.getMessage().getChatId();
+                long userId = update.getMessage().getFrom().getId();
 
-                String response = new LogicBot().handleCommand(text);
+                String response = logicBot.handleCommand(userId,text);
 
                 SendMessage message = new SendMessage();
                 message.setChatId(chatId);
                 message.setText(response);
+
+                setButtons(message);
 
                 try {
                     execute(message);
@@ -39,6 +51,28 @@ public class TelegramBot extends TelegramLongPollingBot{
                     e.printStackTrace();
                 }
         }
+    }
+
+    public synchronized void setButtons(SendMessage sendMessage) {
+        ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
+        replyKeyboardMarkup.setSelective(true);
+        replyKeyboardMarkup.setResizeKeyboard(true);
+        replyKeyboardMarkup.setOneTimeKeyboard(false);
+
+        List<KeyboardRow> keyboard = new ArrayList<>();
+
+        KeyboardRow firstRow = new KeyboardRow();
+        firstRow.add(new KeyboardButton("Новая заметка"));
+        firstRow.add(new KeyboardButton("Удалить заметку"));
+
+        KeyboardRow secondRow = new KeyboardRow();
+        secondRow.add(new KeyboardButton("Список заметок"));
+
+        keyboard.add(firstRow);
+        keyboard.add(secondRow);
+
+        replyKeyboardMarkup.setKeyboard(keyboard);
+        sendMessage.setReplyMarkup(replyKeyboardMarkup);
     }
 
     /**
