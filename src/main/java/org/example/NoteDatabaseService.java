@@ -9,7 +9,6 @@ import java.util.List;
  * <p>
  * Использует SQLite в качестве СУБД и хранит заметки в таблице {@code notes},
  * где каждая запись привязана к уникальному идентификатору пользователя (например, Telegram ID).
- * </p>
  * <p>
  * Поддерживает операции:
  * </p>
@@ -120,9 +119,7 @@ public class NoteDatabaseService {
             pstmt.setLong(1, userId);
             ResultSet rs = pstmt.executeQuery();
             while (rs.next()) {
-                int id = rs.getInt("id");
-                String text = rs.getString("text");
-                notes.add(id + ". " + text);
+                notes.add(rs.getString("text"));
             }
         }
         return notes;
@@ -213,6 +210,29 @@ public class NoteDatabaseService {
             pstmt.setInt(1, noteId);
             pstmt.setLong(2, userId);
             return pstmt.executeQuery().next();
+        }
+    }
+
+    /**
+     * Возвращает реальный идентификатор заметки (id из базы данных) по её порядковому номеру для пользователя.
+     * @param userId идентификатор пользователя
+     * @param index порядковый номер заметки
+     * @return реальный идентификатор заметки в базе данных или {@code null}, если заметки с таким номером не существует
+     * @throws SQLException
+     */
+    public Integer getNoteIdByIndex(long userId, int index) throws SQLException {
+        if (index < 1) return null;
+
+        String sql = "SELECT id FROM notes WHERE user_id = ? ORDER BY id LIMIT 1 OFFSET ?";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setLong(1, userId);
+            pstmt.setInt(2, index - 1); // OFFSET начинается с 0
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                return rs.getInt("id");
+            }
+            return null;
         }
     }
 }
