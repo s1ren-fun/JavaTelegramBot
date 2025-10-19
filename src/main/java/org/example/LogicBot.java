@@ -158,6 +158,12 @@ public class LogicBot {
             return "Ошибка базы данных. Попробуйте позже.";
         }
     }
+    public class ButtonLabels {
+        public static final String NEW_NOTE = "Новая заметка";
+        public static final String DELETE_NOTE = "Удалить заметку";
+        public static final String NOTES_LIST = "Список заметок";
+        public static final String EDIT_NOTE = "Изменить заметку";
+    }
 
     /**
      * Обрабатывает команды главного меню, когда пользователь не находится в специальном состоянии.

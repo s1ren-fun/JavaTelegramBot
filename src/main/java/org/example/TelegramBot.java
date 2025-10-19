@@ -90,20 +90,15 @@ public class TelegramBot extends TelegramLongPollingBot {
         replyKeyboardMarkup.setSelective(true);
         replyKeyboardMarkup.setResizeKeyboard(true);
         replyKeyboardMarkup.setOneTimeKeyboard(false);
-
         List<KeyboardRow> keyboard = new ArrayList<>();
-
         KeyboardRow firstRow = new KeyboardRow();
-        firstRow.add(new KeyboardButton("Новая заметка"));
-        firstRow.add(new KeyboardButton("Удалить заметку"));
-
+        firstRow.add(new KeyboardButton(LogicBot.ButtonLabels.NEW_NOTE));
+        firstRow.add(new KeyboardButton(LogicBot.ButtonLabels.DELETE_NOTE));
         KeyboardRow secondRow = new KeyboardRow();
-        secondRow.add(new KeyboardButton("Список заметок"));
-        secondRow.add(new KeyboardButton("Изменить заметку"));
-
+        secondRow.add(new KeyboardButton(LogicBot.ButtonLabels.NOTES_LIST));
+        secondRow.add(new KeyboardButton(LogicBot.ButtonLabels.EDIT_NOTE));
         keyboard.add(firstRow);
         keyboard.add(secondRow);
-
         replyKeyboardMarkup.setKeyboard(keyboard);
         sendMessage.setReplyMarkup(replyKeyboardMarkup);
     }
@@ -124,6 +119,6 @@ public class TelegramBot extends TelegramLongPollingBot {
      */
     @Override
     public String getBotToken() {
-        return System.getProperty("TelegramToken");
+        return "8295616955:AAHMn1KFNqG2gYxpz0wPK4wrVfhBmmvIhkM";
     }
 }
