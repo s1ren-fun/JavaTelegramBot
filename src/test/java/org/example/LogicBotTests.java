@@ -7,7 +7,7 @@ import java.lang.reflect.Field;
 import java.sql.SQLException;
 import java.util.*;
 
-import static org.junit.jupiter.api.Assertions.*;
+import org.junit.jupiter.api.Assertions;
 
 /**
  * LogicBotTests — набор unit-тестов для проверки логики бота и поведения
@@ -188,7 +188,7 @@ public class LogicBotTests {
     public void startCommandReturnsWelcome() throws SQLException {
         long uid = 1L;
         String resp = bot.handleCommand(uid, "/start");
-        assertEquals("Привет! Я помогу тебе сохранять и просматривать заметки. Используй кнопки ниже.", resp);
+        Assertions.assertEquals("Привет! Я помогу тебе сохранять и просматривать заметки. Используй кнопки ниже.", resp);
     }
     /**
      * Тест: сценарий создания заметки — запрос текста, сохранение, проверка содержимого хранилища.
@@ -196,11 +196,11 @@ public class LogicBotTests {
     @Test
     public void createNoteFlow() throws SQLException {
         long uid = 2L;
-        assertEquals("Отправьте текст заметки.", bot.handleCommand(uid, "Новая заметка"));
-        assertEquals("Заметка сохранена!", bot.handleCommand(uid, "Текст заметки"));
+        Assertions.assertEquals("Отправьте текст заметки.", bot.handleCommand(uid, "Новая заметка"));
+        Assertions.assertEquals("Заметка сохранена!", bot.handleCommand(uid, "Текст заметки"));
         List<String> notes = mock.getAllNotes(uid);
-        assertEquals(1, notes.size());
-        assertEquals("Текст заметки", notes.get(0));
+        Assertions.assertEquals(1, notes.size());
+        Assertions.assertEquals("Текст заметки", notes.get(0));
     }
     /**
      * Тест: попытка редактировать несуществующую заметку должна вернуть сообщение об ошибке.
@@ -210,7 +210,7 @@ public class LogicBotTests {
         long uid = 3L;
         bot.handleCommand(uid, "Изменить заметку");
         String resp = bot.handleCommand(uid, "1");
-        assertEquals("Неизвестная команда. Используйте кнопки", resp);
+        Assertions.assertEquals("Неизвестная команда. Используйте кнопки", resp);
     }
     /**
      * Тест: отмена удаления оставляет заметку в хранилище.
@@ -222,9 +222,9 @@ public class LogicBotTests {
         bot.handleCommand(uid, "Удалить заметку");
         bot.handleCommand(uid, "1");
         String resp = bot.handleCommand(uid, "нет");
-        assertEquals("Удаление отменено.", resp);
+        Assertions.assertEquals("Удаление отменено.", resp);
         List<String> notes = mock.getAllNotes(uid);
-        assertEquals(1, notes.size());
+        Assertions.assertEquals(1, notes.size());
     }
     /**
      * Тест: попытка удаления несуществующей заметки возвращает сообщение об ошибке.
@@ -234,7 +234,7 @@ public class LogicBotTests {
         long uid = 5L; // Пользователь
         bot.handleCommand(uid, "Удалить заметку");
         String resp = bot.handleCommand(uid, "10");
-        assertEquals("Неизвестная команда. Используйте кнопки", resp);
+        Assertions.assertEquals("Неизвестная команда. Используйте кнопки", resp);
     }
     /**
      * Тест: вывод списка заметок корректно содержит все заметки с номерами.
@@ -246,6 +246,6 @@ public class LogicBotTests {
         mock.addNote(uid, "b");
         mock.addNote(uid, "c");
         String list = bot.handleCommand(uid, "Список заметок");
-        assertTrue(list.contains("1. a") && list.contains("2. b") && list.contains("3. c"));
+        Assertions.assertTrue(list.contains("1. a") && list.contains("2. b") && list.contains("3. c"));
     }
 }
