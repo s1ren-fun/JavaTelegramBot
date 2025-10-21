@@ -31,7 +31,7 @@ public class LogicBotTests {
      * MockNoteDatabaseService — простая in-memory реализация NoteDatabaseService,
      * используемая в тестах для управления коллекцией заметок без реальной БД.
      */
-    public static class MockNoteDatabaseService extends NoteDatabaseService {
+    public class MockNoteDatabaseService extends NoteDatabaseService {
         /**
          * Внутреннее представление заметки в моковой базе.
          * Поля соответствуют структуре, ожидаемой тестируемой логикой:
@@ -39,7 +39,7 @@ public class LogicBotTests {
          * {@code userId} — идентификатор владельца,
          * {@code text} — текст заметки.
          */
-        private static class Note {
+        private class Note {
             int id;
             long userId;
             String text;
@@ -155,7 +155,7 @@ public class LogicBotTests {
      * Устанавливает значение приватного (или защищённого) поля у целевого объекта через reflection.
      * <p>Поиск поля ведётся вверх по иерархии классов (включая суперклассы).</p>
      */
-    private static void setPrivateField(Object target, String fieldName, Object value) {
+    private void setPrivateField(Object target, String fieldName, Object value) {
         try {
             Field f = findField(target.getClass(), fieldName);
             f.setAccessible(true);
@@ -171,7 +171,7 @@ public class LogicBotTests {
      * @param fieldName имя искомого поля
      * @return найденное {@link Field}
      */
-    private static Field findField(Class<?> cls, String fieldName) throws NoSuchFieldException {
+    private Field findField(Class<?> cls, String fieldName) throws NoSuchFieldException {
         Class<?> cur = cls;
         while (cur != null) {
             try { return cur.getDeclaredField(fieldName); }
