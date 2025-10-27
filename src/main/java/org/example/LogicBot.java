@@ -23,7 +23,25 @@ public class LogicBot {
     /**
      * Сервис для взаимодействия с базой данных заметок.
      */
-    private NoteDatabaseService noteService = new NoteDatabaseService();
+    private NoteService noteService;
+
+
+    /**
+     * Конструктор по умолчанию — использует реальную базу данных.
+     */
+    public LogicBot() {
+        this.noteService = new NoteDatabaseService();
+    }
+
+    /**
+     * Тестовый/настраиваемый конструктор — позволяет передать альтернативную реализацию NoteDatabaseService,
+     * например, моковую реализацию для unit-тестов. Это предотвращает создание реальной базы данных при тестировании.
+     *
+     * @param noteService реализация сервиса заметок
+     */
+    public LogicBot(NoteService noteService) {
+        this.noteService = noteService;
+    }
 
     /**
      * Перечисление возможных состояний пользователя в процессе взаимодействия с ботом.

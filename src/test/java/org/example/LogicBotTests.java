@@ -1,5 +1,6 @@
 package org.example;
 
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -7,7 +8,6 @@ import java.lang.reflect.Field;
 import java.sql.SQLException;
 import java.util.*;
 
-import org.junit.jupiter.api.Assertions;
 
 /**
  * LogicBotTests — набор unit-тестов для проверки логики бота и поведения
@@ -31,7 +31,7 @@ public class LogicBotTests {
      * MockNoteDatabaseService — простая in-memory реализация NoteDatabaseService,
      * используемая в тестах для управления коллекцией заметок без реальной БД.
      */
-    public class MockNoteDatabaseService extends NoteDatabaseService {
+    public class MockNoteDatabaseService implements NoteService {
         /**
          * Внутреннее представление заметки в моковой базе.
          * Поля соответствуют структуре, ожидаемой тестируемой логикой:
@@ -57,7 +57,7 @@ public class LogicBotTests {
          * Конструктор моковой БД заметок.
          */
         public MockNoteDatabaseService() {
-            super();
+            // in-memory mock; no DB file will be created
         }
         /**
          * Добавляет новую заметку для указанного пользователя.
@@ -147,9 +147,8 @@ public class LogicBotTests {
      */
     @BeforeEach
     public void setUp() throws Exception {
-        bot = new LogicBot();
         mock = new MockNoteDatabaseService();
-        setPrivateField(bot, "noteService", mock);
+        bot = new LogicBot(mock);
     }
     /**
      * Устанавливает значение приватного (или защищённого) поля у целевого объекта через reflection.
@@ -231,7 +230,7 @@ public class LogicBotTests {
      */
     @Test
     public void deleteNonexistentNoteShowsError() throws SQLException {
-        long uid = 5L; // Пользователь
+        long uid = 5L;
         bot.handleCommand(uid, "Удалить заметку");
         String resp = bot.handleCommand(uid, "10");
         Assertions.assertEquals("Неизвестная команда. Используйте кнопки", resp);
@@ -241,7 +240,7 @@ public class LogicBotTests {
      */
     @Test
     public void multipleNotesListedCorrectly() throws SQLException {
-        long uid = 6L; // Пользователь
+        long uid = 6L;
         mock.addNote(uid, "a");
         mock.addNote(uid, "b");
         mock.addNote(uid, "c");

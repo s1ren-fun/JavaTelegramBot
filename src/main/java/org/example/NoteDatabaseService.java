@@ -24,7 +24,7 @@ import java.util.List;
  *
  * @since 1.0
  */
-public class NoteDatabaseService {
+public class NoteDatabaseService implements NoteService {
 
     /**
      * URL подключения к базе данных SQLite.
