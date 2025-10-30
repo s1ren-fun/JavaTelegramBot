@@ -1,4 +1,7 @@
-package org.example;
+package org.example.logic;
+
+import org.example.entity.NoteService;
+import org.example.entity.NoteDatabaseService;
 
 import java.sql.SQLException;
 import java.util.*;
@@ -435,7 +438,7 @@ public class LogicBot {
                 return showAllNotes(userId);
 
             case ButtonLabels.FILTER_BY_TAG:
-                List<String> tagsWithCounts = ((NoteDatabaseService) noteService).getAllUserTagsWithCounts(userId);
+                List<String> tagsWithCounts = noteService.getAllUserTagsWithCounts(userId);
                 if (tagsWithCounts.isEmpty()) {
                     return "У вас пока нет тегов.";
                 }
@@ -444,7 +447,7 @@ public class LogicBot {
                 return "Выберите тег из списка:\n" + tagList + "\nВсе заметки";
 
             case ButtonLabels.VIEW_TAGS:
-                List<String> allTags = ((NoteDatabaseService) noteService).getAllUserTagsWithCounts(userId);
+                List<String> allTags = noteService.getAllUserTagsWithCounts(userId);
                 if (allTags.isEmpty()) {
                     return "У вас пока нет тегов.";
                 }
@@ -551,29 +554,31 @@ public class LogicBot {
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
     private String handleNoteActionSelection(long userId, String input) throws SQLException {
-        if (input.equals("Изменить текст")) {
-            userStates.put(userId, State.AWAITING_NEW_TEXT_FOR_EDIT);
-            Integer noteId = userPendingNoteId.get(userId);
-            if (noteId == null) {
-                userStates.remove(userId);
-                return "Ошибка: заметка не выбрана.";
+        switch (input) {
+            case "Изменить текст" -> {
+                userStates.put(userId, State.AWAITING_NEW_TEXT_FOR_EDIT);
+                Integer noteId = userPendingNoteId.get(userId);
+                if (noteId == null) {
+                    userStates.remove(userId);
+                    return "Ошибка: заметка не выбрана.";
+                }
+                String current = noteService.getNoteTextById(userId, noteId);
+                return "Текущий текст заметки: «" + current + "» Отправьте новый текст.";
             }
-            String current = noteService.getNoteTextById(userId, noteId);
-            return "Текущий текст заметки: «" + current + "» Отправьте новый текст.";
-        }
-        if (input.equals(ButtonLabels.EDIT_TAGS)) {
-            userStates.put(userId, State.AWAITING_NEW_TAGS_INPUT);
-            return "Отправьте новые теги (например: #работа #важное) или оставьте пустым для удаления всех тегов.";
-        }
-        if (input.equals(ButtonLabels.DELETE_NOTE)) {
-            Integer noteId = userPendingNoteId.get(userId);
-            if (noteId == null) {
-                userStates.remove(userId);
-                return "Ошибка: заметка не выбрана.";
+            case ButtonLabels.EDIT_TAGS -> {
+                userStates.put(userId, State.AWAITING_NEW_TAGS_INPUT);
+                return "Отправьте новые теги (например: #работа #важное) или оставьте пустым для удаления всех тегов.";
             }
-            String text = noteService.getNoteTextById(userId, noteId);
-            userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
-            return "Вы уверены, что хотите удалить заметку:\n«" + text + "»?\nОтветьте «да» или «нет».";
+            case ButtonLabels.DELETE_NOTE -> {
+                Integer noteId = userPendingNoteId.get(userId);
+                if (noteId == null) {
+                    userStates.remove(userId);
+                    return "Ошибка: заметка не выбрана.";
+                }
+                String text = noteService.getNoteTextById(userId, noteId);
+                userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
+                return "Вы уверены, что хотите удалить заметку:\n«" + text + "»?\nОтветьте «да» или «нет».";
+            }
         }
         return "Неизвестная команда. Выберите действие из списка.";
     }

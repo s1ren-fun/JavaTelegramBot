@@ -1,5 +1,6 @@
-package org.example;
+package org.example.bots;
 
+import org.example.logic.LogicBot;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
