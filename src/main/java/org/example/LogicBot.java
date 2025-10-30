@@ -1,10 +1,9 @@
 package org.example;
 
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * Основной класс логики бота для управления заметками пользователей.
@@ -23,7 +22,7 @@ public class LogicBot {
     /**
      * Сервис для взаимодействия с базой данных заметок.
      */
-    private NoteService noteService;
+    private final NoteService noteService;
 
 
     /**
@@ -76,7 +75,23 @@ public class LogicBot {
         /**
          * Ожидание подтверждения удаления заметки ("да" или "нет").
          */
-        AWAITING_DELETE_CONFIRMATION
+        AWAITING_DELETE_CONFIRMATION,
+
+        /**
+         * Ожидание выбора тега для фильтрации заметок.
+         */
+        AWAITING_TAG_FOR_FILTER,
+
+        /**
+         * Ожидание номера заметки для редактирования её тегов.
+         */
+        AWAITING_NOTE_ID_FOR_TAG_EDIT,
+
+        /**
+         * Ожидание нового списка тегов для выбранной заметки.
+         */
+        AWAITING_NEW_TAGS_INPUT,
+        AWAITING_ACTION_ON_NOTE
     }
 
     /**
@@ -90,17 +105,35 @@ public class LogicBot {
      */
     private final Map<Long, Integer> userPendingNoteId = new HashMap<>();
 
+    public class ButtonLabels {
+        public static final String NEW_NOTE = "Новая заметка";
+        public static final String DELETE_NOTE = "Удалить заметку";
+        public static final String NOTES_LIST = "Список заметок";
+        public static final String FILTER_BY_TAG = "Фильтр по тегу";
+        public static final String VIEW_TAGS = "Теги";
+        public static final String EDIT_TAGS = "Изменить теги";
+        public static final String EDIT_NOTE = "Изменить заметку";
+    }
+
     /**
-     * Обрабатывает входящее сообщение от пользователя с учётом текущего состояния диалога.
+     * Обрабатывает входящее текстовое сообщение от пользователя с учётом текущего состояния диалога.
+     * <p>
      * В зависимости от состояния пользователя, метод либо ожидает дополнительные данные
-     * (например, текст заметки или номер для редактирования), либо передаёт управление
-     * в главное меню обработки команд.
+     * (например, текст заметки, номер для редактирования или тег),
+     * либо передаёт управление в главное меню обработки команд.
+     * </p>
      *
      * @param userId идентификатор пользователя (обычно Telegram ID)
      * @param input  текстовое сообщение от пользователя
      * @return ответное сообщение для отправки пользователю
      */
     public String handleCommand(long userId, String input) {
+        String trimmedInput = input.trim();
+        if ("Отмена".equalsIgnoreCase(trimmedInput) || "/cancel".equalsIgnoreCase(trimmedInput)) {
+            userStates.remove(userId);
+            userPendingNoteId.remove(userId);
+            return "Действие отменено. Вы в главном меню.";
+        }
         State state = userStates.getOrDefault(userId, State.NONE);
 
         try {
@@ -108,65 +141,35 @@ public class LogicBot {
                 case AWAITING_NOTE_TEXT:
                     noteService.addNote(userId, input);
                     userStates.remove(userId);
+                    List<String> tags = extractTagsFromText(input);
+                    if (!tags.isEmpty()) {
+                        return "Заметка сохранена! 🏷️ Тег: " + String.join(", ", tags);
+                    }
                     return "Заметка сохранена!";
 
                 case AWAITING_NOTE_ID_FOR_EDIT:
-                    if (isNumeric(input)) {
-                        int noteId = Integer.parseInt(input);
-                        Integer realNoteId = noteService.getNoteIdByIndex(userId, noteId);
-                        if (realNoteId!=null) {
-                            userPendingNoteId.put(userId, realNoteId);
-                            userStates.put(userId, State.AWAITING_NEW_TEXT_FOR_EDIT);
-                            String current = noteService.getNoteTextById(userId, realNoteId);
-                            return "Текущий текст заметки: «" +
-                                    current +
-                                    "» Отправьте новый текст.";
-                        } else {
-                            return "Заметки с таким номером нет. Попробуйте снова.";
-                        }
-                    } else {
-                        return "Введите корректный номер заметки.";
-                    }
+                    return handleEditNoteSelection(userId, input);
 
                 case AWAITING_NEW_TEXT_FOR_EDIT:
-                    int noteId = userPendingNoteId.get(userId);
-                    noteService.updateNote(userId, noteId, input);
-                    userStates.remove(userId);
-                    userPendingNoteId.remove(userId);
-                    return "Заметка обновлена!";
+                    return handleNoteTextUpdate(userId, input);
 
                 case AWAITING_NOTE_ID_FOR_DELETE:
-                    if (isNumeric(input)) {
-                        int userIndex = Integer.parseInt(input);
-                        Integer realId = noteService.getNoteIdByIndex(userId, userIndex);
-                        if (realId != null) {
-                            String text = noteService.getNoteTextById(userId, realId);
-                            userPendingNoteId.put(userId, realId);
-                            userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
-                            return "Вы уверены, что хотите удалить заметку:«" +
-                                    text +
-                                    "»? Ответьте «да» или «нет».";
-                        } else {
-                            return "Заметки с таким номером не существует.";
-                        }
-                    } else {
-                        return "Введите корректный номер заметки.";
-                    }
+                    return handleDeleteNoteSelection(userId, input);
 
                 case AWAITING_DELETE_CONFIRMATION:
-                    if ("да".equalsIgnoreCase(input.trim())) {
-                        int delId = userPendingNoteId.get(userId);
-                        noteService.deleteNote(userId, delId);
-                        userStates.remove(userId);
-                        userPendingNoteId.remove(userId);
-                        return "Заметка удалена.";
-                    } else if ("нет".equalsIgnoreCase(input.trim())) {
-                        userStates.remove(userId);
-                        userPendingNoteId.remove(userId);
-                        return "Удаление отменено.";
-                    } else {
-                        return "Ответьте «да» или «нет».";
-                    }
+                    return handleDeleteConfirmation(userId, input);
+
+                case AWAITING_TAG_FOR_FILTER:
+                    return handleTagFilter(userId, input);
+
+                case AWAITING_NOTE_ID_FOR_TAG_EDIT:
+                    return handleEditTagSelection(userId, input);
+
+                case AWAITING_NEW_TAGS_INPUT:
+                    return handleTagUpdate(userId, input);
+
+                case AWAITING_ACTION_ON_NOTE:
+                    return handleNoteActionSelection(userId, input);
 
                 default:
                     return handleMainMenu(userId, input);
@@ -176,16 +179,243 @@ public class LogicBot {
             return "Ошибка базы данных. Попробуйте позже.";
         }
     }
-    public class ButtonLabels {
-        public static final String NEW_NOTE = "Новая заметка";
-        public static final String DELETE_NOTE = "Удалить заметку";
-        public static final String NOTES_LIST = "Список заметок";
-        public static final String EDIT_NOTE = "Изменить заметку";
+
+    /**
+     * Обрабатывает выбор заметки для редактирования (текста или тегов).
+     * <p>
+     * Если ввод — число, загружается заметка и отображаются её данные.
+     * Если ввод — команда действия («Изменить теги», «Удалить заметку»),
+     * выполняется соответствующий переход в новое состояние.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  ввод пользователя (номер заметки или команда действия)
+     * @return ответное сообщение
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleEditNoteSelection(long userId, String input) throws SQLException {
+        if (isNumeric(input)) {
+            int noteIndex = Integer.parseInt(input);
+            Integer realNoteId = noteService.getNoteIdByIndex(userId, noteIndex);
+            if (realNoteId != null) {
+                userPendingNoteId.put(userId, realNoteId);
+                String text = noteService.getNoteTextById(userId, realNoteId);
+                List<String> tags = ((NoteDatabaseService) noteService).getTagsForNote(realNoteId);
+                String tagStr = tags.isEmpty() ? "нет" : String.join(" ", tags);
+
+                userStates.put(userId, State.AWAITING_ACTION_ON_NOTE);
+
+                return String.format(
+                        "Текст: %s\nТеги: %s\nВыберите действие:\n[Изменить текст]\n[Изменить теги]\n[Удалить заметку]",
+                        text, tagStr
+                );
+            } else {
+                return "Заметки с таким номером нет. Попробуйте снова.";
+            }
+
+        } else if (input.equals(ButtonLabels.EDIT_TAGS)) {
+            Integer noteId = userPendingNoteId.get(userId);
+            if (noteId != null) {
+                userStates.put(userId, State.AWAITING_NEW_TAGS_INPUT);
+                return "Отправьте новые теги (например: #работа #важное) или оставьте пустым для удаления всех тегов.";
+            }
+        } else if (input.equals(ButtonLabels.DELETE_NOTE)) {
+            Integer noteId = userPendingNoteId.get(userId);
+            if (noteId != null) {
+                String text = noteService.getNoteTextById(userId, noteId);
+                userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
+                return "Вы уверены, что хотите удалить заметку:\n«" + text + "»?\nОтветьте «да» или «нет».";
+            }
+        }
+        return "Неизвестная команда. Выберите действие.";
+    }
+
+    /**
+     * Обновляет текст выбранной заметки.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  новый текст заметки
+     * @return сообщение об успешном обновлении или ошибке
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleNoteTextUpdate(long userId, String input) throws SQLException {
+        Integer noteId = userPendingNoteId.get(userId);
+        if (noteId == null) {
+            userStates.remove(userId);
+            return "Ошибка: заметка не выбрана.";
+        }
+        noteService.updateNote(userId, noteId, input);
+        userStates.remove(userId);
+        userPendingNoteId.remove(userId);
+        return "Заметка обновлена!";
+    }
+
+    /**
+     * Обрабатывает выбор заметки для удаления.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  номер заметки
+     * @return сообщение с подтверждением удаления или ошибкой
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleDeleteNoteSelection(long userId, String input) throws SQLException {
+        if (isNumeric(input)) {
+            int userIndex = Integer.parseInt(input);
+            Integer realId = noteService.getNoteIdByIndex(userId, userIndex);
+            if (realId != null) {
+                String text = noteService.getNoteTextById(userId, realId);
+                userPendingNoteId.put(userId, realId);
+                userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
+                return "Вы уверены, что хотите удалить заметку:\n«" + text + "»?\nОтветьте «да» или «нет».";
+            } else {
+                return "Заметки с таким номером не существует.";
+            }
+        }
+        return "Введите корректный номер заметки.";
+    }
+
+    /**
+     * Обрабатывает подтверждение удаления заметки.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  «да» или «нет»
+     * @return результат операции
+     */
+    private String handleDeleteConfirmation(long userId, String input) {
+        if ("да".equalsIgnoreCase(input.trim())) {
+            Integer delId = userPendingNoteId.get(userId);
+            if (delId != null) {
+                try {
+                    noteService.deleteNote(userId, delId);
+                } catch (SQLException e) {
+                    return "Ошибка при удалении.";
+                }
+            }
+            userStates.remove(userId);
+            userPendingNoteId.remove(userId);
+            return "Заметка удалена.";
+        } else if ("нет".equalsIgnoreCase(input.trim())) {
+            userStates.remove(userId);
+            userPendingNoteId.remove(userId);
+            return "Удаление отменено.";
+        } else {
+            return "Ответьте «да» или «нет».";
+        }
+    }
+
+    /**
+     * Фильтрует заметки по выбранному тегу.
+     * <p>
+     * Поддерживает специальное значение «Все заметки» для отмены фильтрации.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  тег или команда «Все заметки»
+     * @return список заметок с указанным тегом или сообщение об отсутствии
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleTagFilter(long userId, String input) throws SQLException {
+        if ("Все заметки".equals(input)) {
+            return showAllNotes(userId);
+        }
+        String tag = input.trim().toLowerCase();
+        if (!tag.startsWith("#")) {
+            tag = "#" + tag;
+        }
+        List<String> notes = ((NoteDatabaseService) noteService).getNotesByTag(userId, tag);
+        if (notes.isEmpty()) {
+            return "Заметок с тегом " + tag + " не найдено.";
+        }
+        return String.join("\n", notes);
+    }
+
+    /**
+     * Обрабатывает выбор заметки для редактирования её тегов.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  номер заметки
+     * @return запрос на ввод новых тегов или сообщение об ошибке
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleEditTagSelection(long userId, String input) throws SQLException {
+        if (isNumeric(input)) {
+            int noteIndex = Integer.parseInt(input);
+            Integer realNoteId = noteService.getNoteIdByIndex(userId, noteIndex);
+            if (realNoteId != null) {
+                userPendingNoteId.put(userId, realNoteId);
+                userStates.put(userId, State.AWAITING_NEW_TAGS_INPUT);
+                return "Отправьте новые теги (например: #продукты #список) или оставьте пустым для удаления всех тегов.";
+            } else {
+                return "Заметки с таким номером нет.";
+            }
+        }
+        return "Введите корректный номер заметки.";
+    }
+
+    /**
+     * Обновляет теги у выбранной заметки.
+     * <p>
+     * Сохраняет оригинальный текст заметки, удаляя из него старые теги,
+     * и добавляет новые теги из ввода пользователя.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  новые теги или пустая строка для удаления всех
+     * @return сообщение с результатом обновления тегов
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleTagUpdate(long userId, String input) throws SQLException {
+        Integer noteId = userPendingNoteId.get(userId);
+        if (noteId == null) {
+            userStates.remove(userId);
+            return "Ошибка: заметка не выбрана.";
+        }
+
+        String currentText = noteService.getNoteTextById(userId, noteId);
+        if (currentText == null) {
+            userStates.remove(userId);
+            userPendingNoteId.remove(userId);
+            return "Заметка не найдена.";
+        }
+
+        List<String> newTags = input.trim().isEmpty() ? Collections.emptyList() : extractTagsFromText(input);
+        String textWithoutTags = removeTagsFromText(currentText);
+        String newText = newTags.isEmpty() ? textWithoutTags : (textWithoutTags + " " + String.join(" ", newTags)).trim();
+
+        noteService.updateNote(userId, noteId, newText);
+
+        List<String> oldTags = ((NoteDatabaseService) noteService).getTagsForNote(noteId);
+        if (newTags.isEmpty()) {
+            userStates.remove(userId);
+            userPendingNoteId.remove(userId);
+            return "Все теги удалены!";
+        }
+
+        Set<String> oldSet = new HashSet<>(oldTags);
+        Set<String> newSet = new HashSet<>(newTags);
+        Set<String> removed = new HashSet<>(oldSet);
+        removed.removeAll(newSet);
+        Set<String> added = new HashSet<>(newSet);
+        added.removeAll(oldSet);
+
+        StringBuilder response = new StringBuilder("Теги обновлены!");
+        if (!removed.isEmpty()) {
+            response.append(" Удалён(ы): ").append(String.join(", ", removed));
+        }
+        if (!added.isEmpty()) {
+            response.append(" Добавлен(ы): ").append(String.join(", ", added));
+        }
+        if (newSet.size() == 1 && removed.isEmpty() && added.isEmpty()) {
+            response.append(" Новый тег: ").append(newTags.getFirst());
+        }
+
+        userStates.remove(userId);
+        userPendingNoteId.remove(userId);
+        return response.toString();
     }
 
     /**
      * Обрабатывает команды главного меню, когда пользователь не находится в специальном состоянии.
-     * Поддерживает команды для создания, просмотра, редактирования и удаления заметок.
      *
      * @param userId идентификатор пользователя
      * @param input  команда или текст от пользователя
@@ -197,50 +427,103 @@ public class LogicBot {
             case "/start":
                 return "Привет! Я помогу тебе сохранять и просматривать заметки. Используй кнопки ниже.";
 
-            case "Новая заметка":
+            case ButtonLabels.NEW_NOTE:
                 userStates.put(userId, State.AWAITING_NOTE_TEXT);
                 return "Отправьте текст заметки.";
 
-            case "Список заметок":
-                List<String> notes = noteService.getAllNotes(userId);
-                if (notes.isEmpty()) {
-                    return "У вас пока нет заметок.";
-                }
-                List<String> numbers = new ArrayList<>();
-                for(int i =0;i< notes.size();++i){
-                    numbers.add((i+1)+". "+notes.get(i));
-                }
-                return String.join("\n", numbers);
+            case ButtonLabels.NOTES_LIST:
+                return showAllNotes(userId);
 
-            case "Удалить заметку":
-                List<String> allNotes = noteService.getAllNotes(userId);
-                if (allNotes.isEmpty()) {
-                    return "Нет заметок для удаления.";
+            case ButtonLabels.FILTER_BY_TAG:
+                List<String> tagsWithCounts = ((NoteDatabaseService) noteService).getAllUserTagsWithCounts(userId);
+                if (tagsWithCounts.isEmpty()) {
+                    return "У вас пока нет тегов.";
                 }
-                List<String> allNumbers = new ArrayList<>();
-                for(int i =0;i< allNotes.size();++i){
-                    allNumbers.add((i+1)+". "+allNotes.get(i));
-                }
-                userStates.put(userId, State.AWAITING_NOTE_ID_FOR_DELETE);
-                return "Введите номер заметки, которую хотите удалить:\n" +
-                        String.join("\n", allNumbers);
+                String tagList = String.join("\n", tagsWithCounts);
+                userStates.put(userId, State.AWAITING_TAG_FOR_FILTER);
+                return "Выберите тег из списка:\n" + tagList + "\nВсе заметки";
 
-            case "Изменить заметку":
-                List<String> editNotes = noteService.getAllNotes(userId);
-                if (editNotes.isEmpty()) {
-                    return "Нет заметок для редактирования.";
+            case ButtonLabels.VIEW_TAGS:
+                List<String> allTags = ((NoteDatabaseService) noteService).getAllUserTagsWithCounts(userId);
+                if (allTags.isEmpty()) {
+                    return "У вас пока нет тегов.";
                 }
-                List<String> editNumbers = new ArrayList<>();
-                for(int i =0;i< editNotes.size();++i){
-                    editNumbers.add((i+1)+". "+editNotes.get(i));
-                }
-                userStates.put(userId, State.AWAITING_NOTE_ID_FOR_EDIT);
-                return "Введите номер заметки, которую хотите отредактировать:\n" +
-                        String.join("\n", editNumbers);
+                return "Доступные теги:\n" + String.join("\n", allTags);
+
+            case ButtonLabels.EDIT_NOTE:
+                return promptNoteSelection(userId);
 
             default:
-                return "Неизвестная команда. Используйте кнопки";
+                return "Неизвестная команда. Используйте кнопки.";
         }
+    }
+    /**
+     * Формирует и возвращает список всех заметок пользователя с нумерацией.
+     *
+     * @param userId идентификатор пользователя
+     * @return отформатированный список заметок или сообщение об их отсутствии
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String showAllNotes(long userId) throws SQLException {
+        List<String> notes = noteService.getAllNotes(userId);
+        if (notes.isEmpty()) {
+            return "У вас пока нет заметок.";
+        }
+        return IntStream.range(0, notes.size())
+                .mapToObj(i -> (i + 1) + ". " + notes.get(i))
+                .collect(Collectors.joining("\n"));
+    }
+
+    /**
+     * Запрашивает у пользователя выбор заметки для редактирования текста.
+     *
+     * @param userId идентификатор пользователя
+     * @return сообщение со списком заметок и запросом на ввод номера
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String promptNoteSelection(long userId) throws SQLException {
+        List<String> notes = noteService.getAllNotes(userId);
+        if (notes.isEmpty()) {
+            return "Нет заметок.";
+        }
+        String list = IntStream.range(0, notes.size())
+                .mapToObj(i -> (i + 1) + ". " + notes.get(i))
+                .collect(Collectors.joining("\n"));
+        userStates.put(userId, State.AWAITING_NOTE_ID_FOR_EDIT);
+        return "Введите номер заметки для редактирования:" + "\n" + list;
+    }
+
+    /**
+     * Извлекает теги из текста в формате {@code #тег}.
+     * <p>
+     * Поддерживаемый формат: {@code #} + буквы/цифры/нижнее подчёркивание.
+     * Результат приводится к нижнему регистру, дубликаты удаляются.
+     * </p>
+     *
+     * @param text текст заметки
+     * @return список уникальных тегов в нижнем регистре
+     */
+    private List<String> extractTagsFromText(String text) {
+        List<String> tags = new ArrayList<>();
+        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("#[\\p{L}0-9_]+");
+        java.util.regex.Matcher matcher = pattern.matcher(text);
+        while (matcher.find()) {
+            tags.add(matcher.group().toLowerCase());
+        }
+        return new ArrayList<>(new LinkedHashSet<>(tags));
+    }
+
+    /**
+     * Удаляет все теги из текста заметки.
+     * <p>
+     * Удаляет подстроки, соответствующие шаблону {@code #тег}, и нормализует пробелы.
+     * </p>
+     *
+     * @param text исходный текст заметки
+     * @return текст без тегов
+     */
+    private String removeTagsFromText(String text) {
+        return text.replaceAll("#[\\p{L}0-9_]+", "").trim().replaceAll("\\s+", " ");
     }
 
     /**
@@ -257,5 +540,41 @@ public class LogicBot {
         } catch (NumberFormatException e) {
             return false;
         }
+    }
+
+    /**
+     * Обрабатывает выбор действия над выбранной заметкой.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  команда действия
+     * @return ответное сообщение
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
+    private String handleNoteActionSelection(long userId, String input) throws SQLException {
+        if (input.equals("Изменить текст")) {
+            userStates.put(userId, State.AWAITING_NEW_TEXT_FOR_EDIT);
+            Integer noteId = userPendingNoteId.get(userId);
+            if (noteId == null) {
+                userStates.remove(userId);
+                return "Ошибка: заметка не выбрана.";
+            }
+            String current = noteService.getNoteTextById(userId, noteId);
+            return "Текущий текст заметки: «" + current + "» Отправьте новый текст.";
+        }
+        if (input.equals(ButtonLabels.EDIT_TAGS)) {
+            userStates.put(userId, State.AWAITING_NEW_TAGS_INPUT);
+            return "Отправьте новые теги (например: #работа #важное) или оставьте пустым для удаления всех тегов.";
+        }
+        if (input.equals(ButtonLabels.DELETE_NOTE)) {
+            Integer noteId = userPendingNoteId.get(userId);
+            if (noteId == null) {
+                userStates.remove(userId);
+                return "Ошибка: заметка не выбрана.";
+            }
+            String text = noteService.getNoteTextById(userId, noteId);
+            userStates.put(userId, State.AWAITING_DELETE_CONFIRMATION);
+            return "Вы уверены, что хотите удалить заметку:\n«" + text + "»?\nОтветьте «да» или «нет».";
+        }
+        return "Неизвестная команда. Выберите действие из списка.";
     }
 }

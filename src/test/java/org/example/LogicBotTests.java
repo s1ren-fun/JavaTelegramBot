@@ -150,35 +150,6 @@ public class LogicBotTests {
         mock = new MockNoteDatabaseService();
         bot = new LogicBot(mock);
     }
-    /**
-     * Устанавливает значение приватного (или защищённого) поля у целевого объекта через reflection.
-     * <p>Поиск поля ведётся вверх по иерархии классов (включая суперклассы).</p>
-     */
-    private void setPrivateField(Object target, String fieldName, Object value) {
-        try {
-            Field f = findField(target.getClass(), fieldName);
-            f.setAccessible(true);
-            f.set(target, value);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
-    /**
-     * Находит поле с именем {@code fieldName} в классе {@code cls} или в одном из его суперклассов.
-     *
-     * @param cls класс, в котором начинается поиск
-     * @param fieldName имя искомого поля
-     * @return найденное {@link Field}
-     */
-    private Field findField(Class<?> cls, String fieldName) throws NoSuchFieldException {
-        Class<?> cur = cls;
-        while (cur != null) {
-            try { return cur.getDeclaredField(fieldName); }
-            catch (NoSuchFieldException e) { cur = cur.getSuperclass(); }
-        }
-        throw new NoSuchFieldException(fieldName);
-    }
-
 
     /**
      * Тест: команда /start возвращает приветственное сообщение с подсказкой о дальнейших действиях.
