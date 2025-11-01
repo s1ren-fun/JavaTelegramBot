@@ -1,7 +1,7 @@
 package org.example;
 
 import org.example.entity.NoteService;
-import org.example.logic.LogicBot;
+import org.example.logic.BotLogic;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -132,16 +132,15 @@ public class LogicBotTests {
          * метод возвращает {@code false} и изменений не выполняется.</p>
          */
         @Override
-        public boolean updateNote(long userId, int noteId, String newText) {
+        public void updateNote(long userId, int noteId, String newText) {
             List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
             for (Note n : list) {
                 if (n.id == noteId && n.userId == userId) {
                     n.text = newText;
                     n.tags = extractTags(newText);
-                    return true;
+                    return;
                 }
             }
-            return false;
         }
         /**
          * Удаляет заметку с указанным внутренним идентификатором для данного пользователя.
@@ -151,9 +150,9 @@ public class LogicBotTests {
          * если заметка не найдена — {@code false}.</p>
          */
         @Override
-        public boolean deleteNote(long userId, int noteId) {
+        public void deleteNote(long userId, int noteId) {
             List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
-            return list.removeIf(n -> n.id == noteId && n.userId == userId);
+            list.removeIf(n -> n.id == noteId && n.userId == userId);
         }
 
         /**
@@ -238,7 +237,7 @@ public class LogicBotTests {
         }
     }
 
-    private LogicBot bot;
+    private BotLogic bot;
     private MockNoteDatabaseService mock;
     /**
      * Подготавливает окружение для тестов: создаёт экземпляры {@code LogicBot} и
@@ -250,7 +249,7 @@ public class LogicBotTests {
     @BeforeEach
     public void setUp() {
         mock = new MockNoteDatabaseService();
-        bot = new LogicBot(mock);
+        bot = new BotLogic(mock);
     }
 
     /**
@@ -331,5 +330,6 @@ public class LogicBotTests {
         List<String> tags = mock.getTagsForNote(noteId);
         Assertions.assertTrue(tags.isEmpty());
     }
+
 
 }

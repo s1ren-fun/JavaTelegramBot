@@ -12,8 +12,8 @@ public interface NoteService {
     List<String> getAllNotes(long userId) throws SQLException;
     Integer getNoteIdByIndex(long userId, int index) throws SQLException;
     String getNoteTextById(long userId, int noteId) throws SQLException;
-    boolean updateNote(long userId, int noteId, String newText) throws SQLException;
-    boolean deleteNote(long userId, int noteId) throws SQLException;
+    void updateNote(long userId, int noteId, String newText) throws SQLException;
+    void deleteNote(long userId, int noteId) throws SQLException;
     List<String> getTagsForNote(int noteId) throws SQLException;
     List<String> getNotesByTag(long userId, String tag) throws SQLException;
     List<String> getAllUserTagsWithCounts(long userId) throws SQLException;

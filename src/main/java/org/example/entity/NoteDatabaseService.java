@@ -168,14 +168,13 @@ public class NoteDatabaseService implements NoteService {
     /**
      * Обновляет текст заметки и заменяет все её теги на теги из нового текста.
      *
-     * @param userId   идентификатор пользователя
-     * @param noteId   идентификатор заметки
-     * @param newText  новый текст заметки
-     * @return {@code true}, если заметка была успешно обновлена; {@code false} — если не найдена
+     * @param userId  идентификатор пользователя
+     * @param noteId  идентификатор заметки
+     * @param newText новый текст заметки
      * @throws SQLException если произошла ошибка при выполнении SQL-запроса
      */
-    public boolean updateNote(long userId, int noteId, String newText) throws SQLException {
-        if (!noteExists(userId, noteId)) return false;
+    public void updateNote(long userId, int noteId, String newText) throws SQLException {
+        if (!noteExists(userId, noteId)) return;
 
         String sql = "UPDATE notes SET text = ? WHERE id = ? AND user_id = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl)) {
@@ -190,7 +189,6 @@ public class NoteDatabaseService implements NoteService {
                     updateTagsForNote(conn, noteId, newTags);
                 }
                 conn.commit();
-                return updated > 0;
             }
         }
     }
@@ -203,16 +201,15 @@ public class NoteDatabaseService implements NoteService {
      *
      * @param userId идентификатор пользователя
      * @param noteId идентификатор заметки
-     * @return {@code true}, если заметка была успешно удалена; {@code false} — если не найдена
      * @throws SQLException если произошла ошибка при выполнении SQL-запроса
      */
-    public boolean deleteNote(long userId, int noteId) throws SQLException {
+    public void deleteNote(long userId, int noteId) throws SQLException {
         String sql = "DELETE FROM notes WHERE id = ? AND user_id = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, noteId);
             pstmt.setLong(2, userId);
-            return pstmt.executeUpdate() > 0;
+            pstmt.executeUpdate();
         }
     }
 
@@ -260,7 +257,6 @@ public class NoteDatabaseService implements NoteService {
      * Извлекает теги из текста в формате {@code #тег}.
      * <p>
      * Поддерживаемый формат: {@code #} + буквы/цифры/нижнее подчёркивание.
-     * Результат приводится к нижнему регистру, дубликаты удаляются с сохранением порядка.
      * </p>
      *
      * @param text текст заметки
@@ -320,9 +316,6 @@ public class NoteDatabaseService implements NoteService {
 
     /**
      * Возвращает список тегов, привязанных к указанной заметке.
-     * <p>
-     * Теги возвращаются в порядке вставки (обычно — порядок в тексте).
-     * </p>
      *
      * @param noteId идентификатор заметки
      * @return список тегов (например, {@code ["#личное", "#срочно"]}), пустой список — если тегов нет
@@ -346,7 +339,6 @@ public class NoteDatabaseService implements NoteService {
      * Возвращает заметки пользователя, отфильтрованные по тегу.
      * <p>
      * Если {@code tag} равен {@code null} или пуст, возвращаются все заметки.
-     * Поиск по тегу нечувствителен к регистру благодаря приведению к нижнему регистру при сохранении.
      * </p>
      *
      * @param userId идентификатор пользователя

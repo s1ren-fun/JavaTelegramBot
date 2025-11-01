@@ -20,7 +20,7 @@ import java.util.stream.IntStream;
  *
  * @since 1.0
  */
-public class LogicBot {
+public class BotLogic {
 
     /**
      * Сервис для взаимодействия с базой данных заметок.
@@ -31,7 +31,7 @@ public class LogicBot {
     /**
      * Конструктор по умолчанию — использует реальную базу данных.
      */
-    public LogicBot() {
+    public BotLogic() {
         this.noteService = new NoteDatabaseService();
     }
 
@@ -41,7 +41,7 @@ public class LogicBot {
      *
      * @param noteService реализация сервиса заметок
      */
-    public LogicBot(NoteService noteService) {
+    public BotLogic(NoteService noteService) {
         this.noteService = noteService;
     }
 
@@ -203,7 +203,7 @@ public class LogicBot {
             if (realNoteId != null) {
                 userPendingNoteId.put(userId, realNoteId);
                 String text = noteService.getNoteTextById(userId, realNoteId);
-                List<String> tags = ((NoteDatabaseService) noteService).getTagsForNote(realNoteId);
+                List<String> tags = noteService.getTagsForNote(realNoteId);
                 String tagStr = tags.isEmpty() ? "нет" : String.join(" ", tags);
 
                 userStates.put(userId, State.AWAITING_ACTION_ON_NOTE);
@@ -325,7 +325,7 @@ public class LogicBot {
         if (!tag.startsWith("#")) {
             tag = "#" + tag;
         }
-        List<String> notes = ((NoteDatabaseService) noteService).getNotesByTag(userId, tag);
+        List<String> notes = noteService.getNotesByTag(userId, tag);
         if (notes.isEmpty()) {
             return "Заметок с тегом " + tag + " не найдено.";
         }
@@ -383,11 +383,12 @@ public class LogicBot {
 
         List<String> newTags = input.trim().isEmpty() ? Collections.emptyList() : extractTagsFromText(input);
         String textWithoutTags = removeTagsFromText(currentText);
-        String newText = newTags.isEmpty() ? textWithoutTags : (textWithoutTags + " " + String.join(" ", newTags)).trim();
+        String newText = newTags.isEmpty() ? textWithoutTags
+                : (textWithoutTags + " " + String.join(" ", newTags)).trim();
 
         noteService.updateNote(userId, noteId, newText);
 
-        List<String> oldTags = ((NoteDatabaseService) noteService).getTagsForNote(noteId);
+        List<String> oldTags = noteService.getTagsForNote(noteId);
         if (newTags.isEmpty()) {
             userStates.remove(userId);
             userPendingNoteId.remove(userId);
