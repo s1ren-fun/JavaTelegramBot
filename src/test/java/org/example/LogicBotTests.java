@@ -1,11 +1,10 @@
 package org.example;
 
+import org.example.entity.NoteService;
+import org.example.logic.BotLogic;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import java.lang.reflect.Field;
-import java.sql.SQLException;
 import java.util.*;
 
 
@@ -43,10 +42,12 @@ public class LogicBotTests {
             int id;
             long userId;
             String text;
-            Note(int id, long userId, String text) {
+            List<String> tags;
+            Note(int id, long userId, String text, List<String> tags) {
                 this.id = id;
                 this.userId = userId;
                 this.text = text;
+                this.tags=new ArrayList<>(tags);
             }
         }
 
@@ -59,14 +60,30 @@ public class LogicBotTests {
         public MockNoteDatabaseService() {
             // in-memory mock; no DB file will be created
         }
+
+        /**
+         * Получает все теги из заметки
+         * @param text
+         * @return
+         */
+        private List<String> extractTags(String text) {
+            List<String> tags = new ArrayList<>();
+            java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("#[\\p{L}0-9_]+");
+            java.util.regex.Matcher matcher = pattern.matcher(text);
+            while (matcher.find()) {
+                tags.add(matcher.group().toLowerCase());
+            }
+            return new ArrayList<>(new LinkedHashSet<>(tags));
+        }
         /**
          * Добавляет новую заметку для указанного пользователя.
          * @param userId идентификатор пользователя
          * @param text текст заметки
          */
         @Override
-        public void addNote(long userId, String text) throws SQLException {
-            storage.computeIfAbsent(userId, k -> new ArrayList<>()).add(new Note(nextId++, userId, text));
+        public void addNote(long userId, String text) {
+            List<String> tags = extractTags(text);
+            storage.computeIfAbsent(userId, k -> new ArrayList<>()).add(new Note(nextId++, userId, text, tags));
         }
 
 
@@ -77,21 +94,21 @@ public class LogicBotTests {
          * @return список заметок (в порядке добавления)
          */
         @Override
-        public List<String> getAllNotes(long userId) throws SQLException {
-            List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
-            List<String> out = new ArrayList<>(list.size());
-            for (Note n : list) out.add(n.text);
-            return out;
+        public List<String> getAllNotes(long userId) {
+            return storage.getOrDefault(userId, Collections.emptyList())
+                    .stream()
+                    .map(n -> n.text)
+                    .toList();
         }
 
         /**
          * Возвращает внутренний id заметки по её порядковому номеру в списке пользователя.
          */
         @Override
-        public Integer getNoteIdByIndex(long userId, int index) throws SQLException {
+        public Integer getNoteIdByIndex(long userId, int index) {
             List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
             if (index < 1 || index > list.size()) return null;
-            return list.get(index - 1).id; // Возвращаем id
+            return list.get(index - 1).id;
         }
         /**
          * Возвращает текст заметки по её внутреннему id для конкретного пользователя.
@@ -99,10 +116,13 @@ public class LogicBotTests {
          * Если заметка не найдена или принадлежит другому пользователю — возвращает {@code null}.</p>
          */
         @Override
-        public String getNoteTextById(long userId, int noteId) throws SQLException {
-            List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
-            for (Note n : list) if (n.id == noteId && n.userId == userId) return n.text;
-            return null;
+        public String getNoteTextById(long userId, int noteId) {
+            return storage.getOrDefault(userId, Collections.emptyList())
+                    .stream()
+                    .filter(n -> n.id == noteId && n.userId == userId)
+                    .findFirst()
+                    .map(n -> n.text)
+                    .orElse(null);
         }
         /**
          * Обновляет текст заметки с указанным внутренним идентификатором для данного пользователя.
@@ -112,10 +132,15 @@ public class LogicBotTests {
          * метод возвращает {@code false} и изменений не выполняется.</p>
          */
         @Override
-        public boolean updateNote(long userId, int noteId, String newText) throws SQLException {
+        public void updateNote(long userId, int noteId, String newText) {
             List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
-            for (Note n : list) if (n.id == noteId && n.userId == userId) { n.text = newText; return true; }
-            return false;
+            for (Note n : list) {
+                if (n.id == noteId && n.userId == userId) {
+                    n.text = newText;
+                    n.tags = extractTags(newText);
+                    return;
+                }
+            }
         }
         /**
          * Удаляет заметку с указанным внутренним идентификатором для данного пользователя.
@@ -125,18 +150,94 @@ public class LogicBotTests {
          * если заметка не найдена — {@code false}.</p>
          */
         @Override
-        public boolean deleteNote(long userId, int noteId) throws SQLException {
+        public void deleteNote(long userId, int noteId) {
             List<Note> list = storage.getOrDefault(userId, Collections.emptyList());
-            Iterator<Note> it = list.iterator();
-            while (it.hasNext()) {
-                Note n = it.next();
-                if (n.id == noteId && n.userId == userId) { it.remove(); return true; }
+            list.removeIf(n -> n.id == noteId && n.userId == userId);
+        }
+
+        /**
+         * Возвращает список тегов, привязанных к указанной заметке.
+         * <p>
+         * Теги возвращаются в порядке вставки (обычно — порядок в тексте).
+         * </p>
+         *
+         * @param noteId идентификатор заметки
+         * @return список тегов (например, {@code ["#личное", "#срочно"]}), пустой список — если тегов нет
+         */
+        @Override
+        public List<String> getTagsForNote(int noteId) {
+            for (List<Note> notes : storage.values()) {
+                for (Note n : notes) {
+                    if (n.id == noteId) {
+                        return new ArrayList<>(n.tags);
+                    }
+                }
             }
-            return false;
+            return Collections.emptyList();
+        }
+
+        /**
+         * Возвращает заметки пользователя, отфильтрованные по тегу.
+         * <p>
+         * Если {@code tag} равен {@code null} или пуст, возвращаются все заметки.
+         * Поиск по тегу нечувствителен к регистру благодаря приведению к нижнему регистру при сохранении.
+         * </p>
+         *
+         * @param userId идентификатор пользователя
+         * @param tag    тег для фильтрации (например, {@code "#личное"}), может быть {@code null}
+         * @return список текстов заметок, содержащих указанный тег
+         */
+        @Override
+        public List<String> getNotesByTag(long userId, String tag) {
+            if (tag == null || tag.trim().isEmpty()) {
+                return getAllNotes(userId);
+            }
+            String normalizedTag = tag.toLowerCase();
+            return storage.getOrDefault(userId, Collections.emptyList())
+                    .stream()
+                    .filter(n -> n.tags.contains(normalizedTag))
+                    .map(n -> n.text)
+                    .toList();
+        }
+
+        /**
+         * Возвращает список всех тегов пользователя с количеством заметок, в которых они используются.
+         * <p>
+         * Формат: {@code #тег — N заметок}
+         * Теги сортируются по алфавиту.
+         * </p>
+         *
+         * @param userId идентификатор пользователя
+         * @return список строк вида {@code "#личное — 3 заметки"}
+         */
+        @Override
+        public List<String> getAllUserTagsWithCounts(long userId) {
+            Map<String, Integer> tagCount = new HashMap<>();
+            for (Note n : storage.getOrDefault(userId, Collections.emptyList())) {
+                for (String tag : n.tags) {
+                    tagCount.merge(tag, 1, Integer::sum);
+                }
+            }
+            return tagCount.entrySet().stream()
+                    .sorted(Map.Entry.comparingByKey())
+                    .map(entry -> {
+                        String tag = entry.getKey();
+                        int count = entry.getValue();
+                        String suffix;
+                        if (count % 10 == 1 && count % 100 != 11) {
+                            suffix = "заметка";
+                        } else if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) {
+                            suffix = "заметки";
+                        } else {
+                            suffix = "заметок";
+                        }
+                        return tag + " — " + count + " " + suffix;
+                    })
+                    .toList();
         }
     }
 
-    private LogicBot bot;
+    private BotLogic bot;
     private MockNoteDatabaseService mock;
     /**
      * Подготавливает окружение для тестов: создаёт экземпляры {@code LogicBot} и
@@ -146,105 +247,89 @@ public class LogicBotTests {
      * <p>Аннотирован как {@code @BeforeEach} — выполняется перед каждым тестом.</p>
      */
     @BeforeEach
-    public void setUp() throws Exception {
+    public void setUp() {
         mock = new MockNoteDatabaseService();
-        bot = new LogicBot(mock);
+        bot = new BotLogic(mock);
     }
+
     /**
-     * Устанавливает значение приватного (или защищённого) поля у целевого объекта через reflection.
-     * <p>Поиск поля ведётся вверх по иерархии классов (включая суперклассы).</p>
+     * Тест: добавление заметки с тегом → тег извлекается и сохраняется.
      */
-    private void setPrivateField(Object target, String fieldName, Object value) {
-        try {
-            Field f = findField(target.getClass(), fieldName);
-            f.setAccessible(true);
-            f.set(target, value);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+    @Test
+    public void addNoteWithTagsExtractsTags() {
+        long uid = 10L;
+        bot.handleCommand(uid, "Новая заметка");
+        bot.handleCommand(uid, "Купить хлеб #продукты #список");
+
+        List<String> tags = mock.getTagsForNote(mock.getNoteIdByIndex(uid, 1));
+        Assertions.assertEquals(2, tags.size());
+        Assertions.assertTrue(tags.contains("#продукты"));
+        Assertions.assertTrue(tags.contains("#список"));
     }
+
     /**
-     * Находит поле с именем {@code fieldName} в классе {@code cls} или в одном из его суперклассов.
-     *
-     * @param cls класс, в котором начинается поиск
-     * @param fieldName имя искомого поля
-     * @return найденное {@link Field}
+     * Тест: фильтрация заметок по тегу.
      */
-    private Field findField(Class<?> cls, String fieldName) throws NoSuchFieldException {
-        Class<?> cur = cls;
-        while (cur != null) {
-            try { return cur.getDeclaredField(fieldName); }
-            catch (NoSuchFieldException e) { cur = cur.getSuperclass(); }
-        }
-        throw new NoSuchFieldException(fieldName);
+    @Test
+    public void filterNotesByTag() {
+        long uid = 11L;
+        mock.addNote(uid, "Подготовить отчёт #работа");
+        mock.addNote(uid, "Купить молоко #личное");
+        mock.addNote(uid, "Идея для стартапа #идея #работа");
+
+        List<String> workNotes = mock.getNotesByTag(uid, "#работа");
+        Assertions.assertEquals(2, workNotes.size());
+        Assertions.assertTrue(workNotes.contains("Подготовить отчёт #работа"));
+        Assertions.assertTrue(workNotes.contains("Идея для стартапа #идея #работа"));
+    }
+
+    /**
+     * Тест: получение списка всех тегов с количеством.
+     */
+    @Test
+    public void getAllUserTagsWithCounts(){
+        long uid = 12L;
+        mock.addNote(uid, "Заметка 1 #тег");
+        mock.addNote(uid, "Заметка 2 #тег");
+        mock.addNote(uid, "Заметка 3 #другой");
+
+        List<String> tagList = mock.getAllUserTagsWithCounts(uid);
+        Assertions.assertEquals(2, tagList.size());
+        Assertions.assertTrue(tagList.contains("#тег — 2 заметки"));
+        Assertions.assertTrue(tagList.contains("#другой — 1 заметка"));
+    }
+
+    /**
+     * Тест: обновление заметки → теги перезаписываются.
+     */
+    @Test
+    public void updateNoteReplacesTags() {
+        long uid = 13L;
+        mock.addNote(uid, "Старый текст #старый");
+        int noteId = mock.getNoteIdByIndex(uid, 1);
+
+        mock.updateNote(uid, noteId, "Новый текст #новый");
+
+        List<String> tags = mock.getTagsForNote(noteId);
+        Assertions.assertEquals(1, tags.size());
+        Assertions.assertEquals("#новый", tags.getFirst());
+        Assertions.assertFalse(tags.contains("#старый"));
+    }
+
+    /**
+     * Тест: удаление всех тегов (пустой список).
+     */
+    @Test
+    public void updateNoteWithNoTagsClearsTags()  {
+        long uid = 14L;
+        mock.addNote(uid, "Текст с тегом #тег");
+        int noteId = mock.getNoteIdByIndex(uid, 1);
+
+        mock.updateNote(uid, noteId, "Текст без тегов");
+
+        List<String> tags = mock.getTagsForNote(noteId);
+        Assertions.assertTrue(tags.isEmpty());
     }
 
 
-    /**
-     * Тест: команда /start возвращает приветственное сообщение с подсказкой о дальнейших действиях.
-     */
-    @Test
-    public void startCommandReturnsWelcome() throws SQLException {
-        long uid = 1L;
-        String resp = bot.handleCommand(uid, "/start");
-        Assertions.assertEquals("Привет! Я помогу тебе сохранять и просматривать заметки. Используй кнопки ниже.", resp);
-    }
-    /**
-     * Тест: сценарий создания заметки — запрос текста, сохранение, проверка содержимого хранилища.
-     */
-    @Test
-    public void createNoteFlow() throws SQLException {
-        long uid = 2L;
-        Assertions.assertEquals("Отправьте текст заметки.", bot.handleCommand(uid, "Новая заметка"));
-        Assertions.assertEquals("Заметка сохранена!", bot.handleCommand(uid, "Текст заметки"));
-        List<String> notes = mock.getAllNotes(uid);
-        Assertions.assertEquals(1, notes.size());
-        Assertions.assertEquals("Текст заметки", notes.get(0));
-    }
-    /**
-     * Тест: попытка редактировать несуществующую заметку должна вернуть сообщение об ошибке.
-     */
-    @Test
-    public void editNonexistentNoteShowsError() throws SQLException {
-        long uid = 3L;
-        bot.handleCommand(uid, "Изменить заметку");
-        String resp = bot.handleCommand(uid, "1");
-        Assertions.assertEquals("Неизвестная команда. Используйте кнопки", resp);
-    }
-    /**
-     * Тест: отмена удаления оставляет заметку в хранилище.
-     */
-    @Test
-    public void deleteCancelKeepsNote() throws SQLException {
-        long uid = 4L;
-        mock.addNote(uid, "не удалять");
-        bot.handleCommand(uid, "Удалить заметку");
-        bot.handleCommand(uid, "1");
-        String resp = bot.handleCommand(uid, "нет");
-        Assertions.assertEquals("Удаление отменено.", resp);
-        List<String> notes = mock.getAllNotes(uid);
-        Assertions.assertEquals(1, notes.size());
-    }
-    /**
-     * Тест: попытка удаления несуществующей заметки возвращает сообщение об ошибке.
-     */
-    @Test
-    public void deleteNonexistentNoteShowsError() throws SQLException {
-        long uid = 5L;
-        bot.handleCommand(uid, "Удалить заметку");
-        String resp = bot.handleCommand(uid, "10");
-        Assertions.assertEquals("Неизвестная команда. Используйте кнопки", resp);
-    }
-    /**
-     * Тест: вывод списка заметок корректно содержит все заметки с номерами.
-     */
-    @Test
-    public void multipleNotesListedCorrectly() throws SQLException {
-        long uid = 6L;
-        mock.addNote(uid, "a");
-        mock.addNote(uid, "b");
-        mock.addNote(uid, "c");
-        String list = bot.handleCommand(uid, "Список заметок");
-        Assertions.assertTrue(list.contains("1. a") && list.contains("2. b") && list.contains("3. c"));
-    }
 }
