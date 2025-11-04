@@ -145,11 +145,6 @@ public class BotLogic {
         try {
             switch (state) {
                 case AWAITING_NOTE_TEXT:
-                    if (ButtonLabels.CANCEL.equals(input)) {
-                        userStates.remove(userId);
-                        userPendingNoteId.remove(userId);
-                        return "Действие отменено. Вы в главном меню.";
-                    }
                     noteService.addNote(userId, input);
                     userStates.remove(userId);
                     List<String> tags = extractTagsFromText(input);
@@ -171,11 +166,6 @@ public class BotLogic {
                     return handleDeleteConfirmation(userId, input);
 
                 case AWAITING_TAG_FOR_FILTER:
-                    if (ButtonLabels.CANCEL.equals(input)) {
-                        userStates.remove(userId);
-                        userPendingNoteId.remove(userId);
-                        return "Действие отменено. Вы в главном меню.";
-                    }
                     return handleTagFilter(userId, input);
 
                 case AWAITING_NOTE_ID_FOR_TAG_EDIT:

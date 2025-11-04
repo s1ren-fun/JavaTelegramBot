@@ -61,7 +61,6 @@ public class TelegramBot extends TelegramLongPollingBot {
             SendMessage message = new SendMessage();
             message.setChatId(chatId);
             message.setText(response);
-            // Изменяем вызов метода setButtons, добавляя userId
             setButtons(message, userId);
             try {
                 execute(message);
@@ -91,19 +90,15 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         List<KeyboardRow> keyboard = new ArrayList<>();
 
-        // Получаем текущее состояние пользователя
         State userState = logicBot.getUserState(userId);
 
         if (userState == State.AWAITING_ACTION_ON_NOTE) {
-            // Клавиатура для экрана действий с заметкой
             KeyboardRow firstRow = new KeyboardRow();
             firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
             firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_TAGS));
-
             KeyboardRow secondRow = new KeyboardRow();
             secondRow.add(new KeyboardButton("Изменить текст"));
             secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
-
             keyboard.add(firstRow);
             keyboard.add(secondRow);
         }else if (userState == State.AWAITING_TAG_FOR_FILTER){
@@ -115,7 +110,6 @@ public class TelegramBot extends TelegramLongPollingBot {
             firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
             keyboard.add(firstRow);
         } else {
-            // Главное меню
             KeyboardRow firstRow = new KeyboardRow();
             firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_NOTE));
             firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
@@ -148,6 +142,6 @@ public class TelegramBot extends TelegramLongPollingBot {
      */
     @Override
     public String getBotToken() {
-        return "8295616955:AAHMn1KFNqG2gYxpz0wPK4wrVfhBmmvIhkM"; //System.getProperty("TelegramToken");
+        return System.getProperty("TelegramToken");
     }
 }
