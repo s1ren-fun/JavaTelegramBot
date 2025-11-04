@@ -1,5 +1,7 @@
-package org.example;
+package org.example.bots;
 
+import org.example.logic.BotLogic;
+import org.example.logic.BotLogic.State;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -16,7 +18,7 @@ import java.util.List;
  * <p>
  * Данный класс наследуется от {@link TelegramLongPollingBot} и обрабатывает
  * входящие сообщения от пользователей, делегируя логику обработки команд
- * экземпляру {@link LogicBot}. Также отвечает за формирование и отправку
+ * экземпляру {@link BotLogic}. Также отвечает за формирование и отправку
  * ответных сообщений с интерактивной клавиатурой.
  * </p>
  * <p>
@@ -24,7 +26,7 @@ import java.util.List;
  * </p>
  * <ul>
  *     <li>Получение и обработка входящих текстовых сообщений.</li>
- *     <li>Передача текста сообщения и идентификатора пользователя в {@link LogicBot}.</li>
+ *     <li>Передача текста сообщения и идентификатора пользователя в {@link BotLogic}.</li>
  *     <li>Формирование ответного сообщения с кнопками быстрого доступа.</li>
  *     <li>Отправка ответа пользователю через Telegram Bot API.</li>
  * </ul>
@@ -36,7 +38,7 @@ public class TelegramBot extends TelegramLongPollingBot {
     /**
      * Экземпляр логического обработчика команд, отвечающий за бизнес-логику бота.
      */
-    private final LogicBot logicBot = new LogicBot();
+    private final BotLogic logicBot = new BotLogic();
 
     /**
      * Обрабатывает входящие обновления от Telegram API.
@@ -55,15 +57,11 @@ public class TelegramBot extends TelegramLongPollingBot {
             String text = update.getMessage().getText();
             long chatId = update.getMessage().getChatId();
             long userId = update.getMessage().getFrom().getId();
-
             String response = logicBot.handleCommand(userId, text);
-
             SendMessage message = new SendMessage();
             message.setChatId(chatId);
             message.setText(response);
-
-            setButtons(message);
-
+            setButtons(message, userId);
             try {
                 execute(message);
             } catch (TelegramApiException e) {
@@ -71,7 +69,6 @@ public class TelegramBot extends TelegramLongPollingBot {
             }
         }
     }
-
     /**
      * Настраивает интерактивную клавиатуру (reply keyboard) для отправляемого сообщения.
      * <p>
@@ -85,20 +82,46 @@ public class TelegramBot extends TelegramLongPollingBot {
      *
      * @param sendMessage объект {@link SendMessage}, к которому будет прикреплена клавиатура
      */
-    public synchronized void setButtons(SendMessage sendMessage) {
+    public synchronized void setButtons(SendMessage sendMessage, long userId) {
         ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
         replyKeyboardMarkup.setSelective(true);
         replyKeyboardMarkup.setResizeKeyboard(true);
         replyKeyboardMarkup.setOneTimeKeyboard(false);
+
         List<KeyboardRow> keyboard = new ArrayList<>();
-        KeyboardRow firstRow = new KeyboardRow();
-        firstRow.add(new KeyboardButton(LogicBot.ButtonLabels.NEW_NOTE));
-        firstRow.add(new KeyboardButton(LogicBot.ButtonLabels.DELETE_NOTE));
-        KeyboardRow secondRow = new KeyboardRow();
-        secondRow.add(new KeyboardButton(LogicBot.ButtonLabels.NOTES_LIST));
-        secondRow.add(new KeyboardButton(LogicBot.ButtonLabels.EDIT_NOTE));
-        keyboard.add(firstRow);
-        keyboard.add(secondRow);
+
+        State userState = logicBot.getUserState(userId);
+
+        if (userState == State.AWAITING_ACTION_ON_NOTE) {
+            KeyboardRow firstRow = new KeyboardRow();
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_TAGS));
+            KeyboardRow secondRow = new KeyboardRow();
+            secondRow.add(new KeyboardButton("Изменить текст"));
+            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(firstRow);
+            keyboard.add(secondRow);
+        }else if (userState == State.AWAITING_TAG_FOR_FILTER){
+            KeyboardRow firstRow = new KeyboardRow();
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(firstRow);
+        } else if (userState == State.AWAITING_NOTE_TEXT) {
+            KeyboardRow firstRow = new KeyboardRow();
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(firstRow);
+        } else {
+            KeyboardRow firstRow = new KeyboardRow();
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_NOTE));
+            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
+
+            KeyboardRow secondRow = new KeyboardRow();
+            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.FILTER_BY_TAG));
+            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
+
+            keyboard.add(firstRow);
+            keyboard.add(secondRow);
+        }
+
         replyKeyboardMarkup.setKeyboard(keyboard);
         sendMessage.setReplyMarkup(replyKeyboardMarkup);
     }
