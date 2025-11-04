@@ -102,13 +102,7 @@ public class NoteDatabaseService implements NoteService {
             throw new RuntimeException("Ошибка инициализации базы данных", e);
         }
     }
-    /**
-     * Добавляет новую заметку для указанного пользователя.
-     *
-     * @param userId идентификатор пользователя (например, Telegram ID)
-     * @param text   текст новой заметки (не должен быть {@code null})
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
+
     public void addNote(long userId, String text) throws SQLException {
         String sqlNote = "INSERT INTO notes (user_id, text) VALUES (?, ?)";
         try (Connection conn = DriverManager.getConnection(dbUrl)) {
@@ -129,28 +123,10 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    /**
-     * Возвращает все заметки пользователя.
-     *
-     * @param userId идентификатор пользователя
-     * @return список текстов заметок
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public List<String> getAllNotes(long userId) throws SQLException {
         return getNotesByTag(userId, null);
     }
 
-    /**
-     * Возвращает текст заметки по её идентификатору и идентификатору пользователя.
-     * <p>
-     * Если заметка не найдена или не принадлежит указанному пользователю, возвращается {@code null}.
-     * </p>
-     *
-     * @param userId идентификатор пользователя
-     * @param noteId идентификатор заметки
-     * @return текст заметки или {@code null}, если заметка не существует или не принадлежит пользователю
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public String getNoteTextById(long userId, int noteId) throws SQLException {
         String sql = "SELECT text FROM notes WHERE id = ? AND user_id = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
@@ -165,14 +141,6 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    /**
-     * Обновляет текст заметки и заменяет все её теги на теги из нового текста.
-     *
-     * @param userId  идентификатор пользователя
-     * @param noteId  идентификатор заметки
-     * @param newText новый текст заметки
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public void updateNote(long userId, int noteId, String newText) throws SQLException {
         if (!noteExists(userId, noteId)) return;
 
@@ -193,16 +161,6 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    /**
-     * Удаляет заметку по её идентификатору и идентификатору пользователя.
-     * <p>
-     * Удаление происходит только если заметка принадлежит указанному пользователю.
-     * </p>
-     *
-     * @param userId идентификатор пользователя
-     * @param noteId идентификатор заметки
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public void deleteNote(long userId, int noteId) throws SQLException {
         String sql = "DELETE FROM notes WHERE id = ? AND user_id = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
@@ -231,12 +189,6 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    /**
-     * Возвращает реальный идентификатор заметки (id из базы данных) по её порядковому номеру для пользователя.
-     * @param userId идентификатор пользователя
-     * @param index порядковый номер заметки
-     * @return реальный идентификатор заметки в базе данных или {@code null}, если заметки с таким номером не существует
-     */
     public Integer getNoteIdByIndex(long userId, int index) throws SQLException {
         if (index < 1) return null;
 
@@ -314,13 +266,6 @@ public class NoteDatabaseService implements NoteService {
         saveTagsForNote(conn, noteId, newTags);
     }
 
-    /**
-     * Возвращает список тегов, привязанных к указанной заметке.
-     *
-     * @param noteId идентификатор заметки
-     * @return список тегов (например, {@code ["#личное", "#срочно"]}), пустой список — если тегов нет
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public List<String> getTagsForNote(int noteId) throws SQLException {
         List<String> tags = new ArrayList<>();
         String sql = "SELECT tag FROM note_tags WHERE note_id = ? ORDER BY id";
@@ -335,17 +280,6 @@ public class NoteDatabaseService implements NoteService {
         return tags;
     }
 
-    /**
-     * Возвращает заметки пользователя, отфильтрованные по тегу.
-     * <p>
-     * Если {@code tag} равен {@code null} или пуст, возвращаются все заметки.
-     * </p>
-     *
-     * @param userId идентификатор пользователя
-     * @param tag    тег для фильтрации (например, {@code "#личное"}), может быть {@code null}
-     * @return список текстов заметок, содержащих указанный тег
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public List<String> getNotesByTag(long userId, String tag) throws SQLException {
         List<String> notes = new ArrayList<>();
         if (tag == null || tag.trim().isEmpty()) {
@@ -379,17 +313,6 @@ public class NoteDatabaseService implements NoteService {
         return notes;
     }
 
-    /**
-     * Возвращает список всех тегов пользователя с количеством заметок, в которых они используются.
-     * <p>
-     * Формат: {@code #тег — N заметок}
-     * Теги сортируются по алфавиту.
-     * </p>
-     *
-     * @param userId идентификатор пользователя
-     * @return список строк вида {@code "#личное — 3 заметки"}
-     * @throws SQLException если произошла ошибка при выполнении SQL-запроса
-     */
     public List<String> getAllUserTagsWithCounts(long userId) throws SQLException {
         List<String> result = new ArrayList<>();
         String sql = """
