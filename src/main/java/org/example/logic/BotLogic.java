@@ -49,7 +49,7 @@ public class BotLogic {
      * Перечисление возможных состояний пользователя в процессе взаимодействия с ботом.
      * Используется для отслеживания контекста диалога.
      */
-    private enum State {
+    public enum State {
         /**
          * Пользователь не находится в каком-либо специальном состоянии.
          */
@@ -116,8 +116,11 @@ public class BotLogic {
         public static final String VIEW_TAGS = "Теги";
         public static final String EDIT_TAGS = "Изменить теги";
         public static final String EDIT_NOTE = "Изменить заметку";
+        public static final String CANCEL = "Отмена";
     }
-
+    public State getUserState(long userId) {
+        return userStates.getOrDefault(userId, State.NONE);
+    }
     /**
      * Обрабатывает входящее текстовое сообщение от пользователя с учётом текущего состояния диалога.
      * <p>
