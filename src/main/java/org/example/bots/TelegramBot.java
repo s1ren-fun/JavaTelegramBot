@@ -36,9 +36,29 @@ import java.util.List;
 public class TelegramBot extends TelegramLongPollingBot {
 
     /**
-     * Экземпляр логического обработчика команд, отвечающий за бизнес-логику бота.
+     * Экземпляр логического обработчика команд, отвечающий за логику бота.
      */
     private final BotLogic logicBot = new BotLogic();
+
+    public void start() throws Exception {
+        String token = getBotToken();
+        if (token == null || token.isBlank()) {
+            throw new IllegalStateException("Telegram token is not set. Установите системное свойство -DTelegramToken=YOUR_TOKEN или измените getBotToken().");
+        }
+        System.out.println("Starting Telegram bot...");
+        final org.telegram.telegrambots.meta.TelegramBotsApi botsApi =
+                new org.telegram.telegrambots.meta.TelegramBotsApi(
+                        org.telegram.telegrambots.updatesreceivers.DefaultBotSession.class);
+        botsApi.registerBot(this);
+        System.out.println("Telegram bot ready.");
+        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("Shutting down Telegram bot...");
+            latch.countDown();
+        }));
+        latch.await();
+        System.out.println("Telegram bot stopped.");
+    }
 
     /**
      * Обрабатывает входящие обновления от Telegram API.
@@ -126,6 +146,8 @@ public class TelegramBot extends TelegramLongPollingBot {
         sendMessage.setReplyMarkup(replyKeyboardMarkup);
     }
 
+
+    public
     /**
      * Возвращает имя пользователя Telegram-бота.
      * @return строка с именем бота
