@@ -3,60 +3,71 @@ package org.example.bots;
 import org.example.logic.BotLogic;
 import org.example.logic.BotLogic.State;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
+import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.ReplyKeyboardMarkup;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardButton;
 import org.telegram.telegrambots.meta.api.objects.replykeyboard.buttons.KeyboardRow;
 import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
+import org.telegram.telegrambots.updatesreceivers.DefaultBotSession;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 
 /**
- * Основной класс Telegram-бота, реализующий взаимодействие с Telegram Bot API.
- * <p>
- * Данный класс наследуется от {@link TelegramLongPollingBot} и обрабатывает
- * входящие сообщения от пользователей, делегируя логику обработки команд
- * экземпляру {@link BotLogic}. Также отвечает за формирование и отправку
- * ответных сообщений с интерактивной клавиатурой.
- * </p>
- * <p>
- * Основные обязанности:
- * </p>
- * <ul>
- *     <li>Получение и обработка входящих текстовых сообщений.</li>
- *     <li>Передача текста сообщения и идентификатора пользователя в {@link BotLogic}.</li>
- *     <li>Формирование ответного сообщения с кнопками быстрого доступа.</li>
- *     <li>Отправка ответа пользователю через Telegram Bot API.</li>
- * </ul>
- *
- * @since 1.0
+ * Telegram-бот, реализующий логику приёма обновлений (updates) и отправки ответов
+ * через библиотеку telegrambots. Оборачивает и использует {@link BotLogic} для
+ * обработки пользовательских команд и управления состояниями диалога.
+ * <p>Класс регистрирует себя в {@code TelegramBotsApi} при вызове {@link #start()}
+ * и обрабатывает входящие обновления в {@link #onUpdateReceived(Update)}.</p>
+ * <p>Экземпляр класса хранит внутренний объект {@link BotLogic} и предоставляет
+ * удобные методы для настройки клавиатуры ответов.</p>
  */
 public class TelegramBot extends TelegramLongPollingBot {
 
-    /**
-     * Экземпляр логического обработчика команд, отвечающий за бизнес-логику бота.
-     */
-    private final BotLogic logicBot = new BotLogic();
 
+    private final BotLogic logicBot = new BotLogic();
+/**
+ * Инициализирует и регистрирует бота в Telegram API.
+ * <p>Метод создаёт экземпляр {@link TelegramBotsApi} и регистрирует текущий бот. Для удержания
+ * потока работы приложения используется {@link java.util.concurrent.CountDownLatch},
+ * который ожидает бесконечно, пока не будет прерван.</p>
+ * @throws Exception если регистрация бота в TelegramBotsApi не удалась
+ */
+    public void start() throws Exception {
+        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
+        botsApi.registerBot(this);
+        CountDownLatch latch = new CountDownLatch(1);
+        try {
+            latch.await();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
     /**
-     * Обрабатывает входящие обновления от Telegram API.
-     * <p>
-     * Метод вызывается автоматически при получении нового сообщения.
-     * Поддерживается только обработка текстовых сообщений.
-     * Нетекстовые обновления (например, стикеры, фото и т.д.) игнорируются.
-     * </p>
-     *
-     * @param update объект, содержащий информацию о новом событии (сообщении, callback и т.д.)
-     *               от Telegram. Обрабатывается только если содержит текстовое сообщение.
+     * Обрабатывает входящее обновление (update) от Telegram.
+     * <p>Поведение:</p>
+     * <ul>
+     * <li>Проверяет, что {@code update}, {@code update.getMessage()} и
+     * {@code update.getMessage().getText()} не равны {@code null}; в противном случае — ничего не делает.</li>
+     * <li>Извлекает {@code chatId}, {@code userId} и текст сообщения.</li>
+     * <li>Передаёт текст и идентификатор пользователя в {@link BotLogic#handleCommand(long, String)} и получает ответную строку.</li>
+     * <li>Формирует {@link SendMessage} с ответом, вызывает {@link #setButtons(SendMessage, long)}
+     * для прикрепления клавиатуры, затем пытается выполнить отправку через
+     * {@link #execute(org.telegram.telegrambots.meta.api.methods.BotApiMethod)}.</li>
+     * <li>Все исключения логируются через {@code e.printStackTrace()} — метод не пробрасывает исключений наружу.</li>
+     * </ul>
+     * @param update входящее обновление от Telegram (может быть {@code null}, в этом случае метод ничего не делает).
      */
     @Override
     public void onUpdateReceived(Update update) {
-        if (update.hasMessage() && update.getMessage().hasText()) {
+        try {
+            if (update == null || update.getMessage() == null || update.getMessage().getText() == null) return;
+            String chatId = String.valueOf(update.getMessage().getChatId());
+            long userId = Long.parseLong(String.valueOf(update.getMessage().getFrom().getId()));
             String text = update.getMessage().getText();
-            long chatId = update.getMessage().getChatId();
-            long userId = update.getMessage().getFrom().getId();
             String response = logicBot.handleCommand(userId, text);
             SendMessage message = new SendMessage();
             message.setChatId(chatId);
@@ -67,81 +78,72 @@ public class TelegramBot extends TelegramLongPollingBot {
             } catch (TelegramApiException e) {
                 e.printStackTrace();
             }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
     /**
-     * Настраивает интерактивную клавиатуру (reply keyboard) для отправляемого сообщения.
-     * <p>
-     * Добавляет стандартный набор кнопок для удобного взаимодействия с ботом:
-     * «Новая заметка», «Удалить заметку», «Список заметок», «Изменить заметку».
-     * </p>
-     * <p>
-     * Метод синхронизирован для обеспечения потокобезопасности при одновременной отправке
-     * нескольких сообщений (хотя в текущей реализации это маловероятно).
-     * </p>
-     *
-     * @param sendMessage объект {@link SendMessage}, к которому будет прикреплена клавиатура
+     * Устанавливает ReplyKeyboardMarkup (кнопочную клавиатуру) для сообщения
+     * {@code sendMessage} в зависимости от состояния пользователя.
+     * <p>Поведение:</p>
+     * <ul>
+     * <li>Создаёт {@link ReplyKeyboardMarkup} с resize/ selective флагами.</li>
+     * <li>Опрашивает текущее состояние пользователя через {@link BotLogic#getUserState(long)}.</li>
+     * <li>В зависимости от состояния ({@code AWAITING_ACTION_ON_NOTE},
+     * {@code AWAITING_NOTE_TEXT} или другое) формирует соответствующие строки
+     * клавиатуры с кнопками из {@link BotLogic.ButtonLabels}.</li>
+     * <li>Устанавливает сформированную клавиатуру в {@code sendMessage}.</li>
+     * </ul>
+     * <p>Метод объявлен {@code synchronized} для обеспечения потокобезопасного
+     * доступа при параллельной обработке update'ов и корректного чтения/использования состояния пользователя.</p>
+     * @param sendMessage объект сообщения, к которому будет прикреплена клавиатура; не должен быть {@code null}.
+     * @param userId идентификатор пользователя (используется для получения состояния).
      */
     public synchronized void setButtons(SendMessage sendMessage, long userId) {
-        ReplyKeyboardMarkup replyKeyboardMarkup = new ReplyKeyboardMarkup();
-        replyKeyboardMarkup.setSelective(true);
-        replyKeyboardMarkup.setResizeKeyboard(true);
-        replyKeyboardMarkup.setOneTimeKeyboard(false);
+        ReplyKeyboardMarkup markup = new ReplyKeyboardMarkup();
+        markup.setResizeKeyboard(true);
+        markup.setSelective(true);
 
         List<KeyboardRow> keyboard = new ArrayList<>();
 
         State userState = logicBot.getUserState(userId);
 
         if (userState == State.AWAITING_ACTION_ON_NOTE) {
-            KeyboardRow firstRow = new KeyboardRow();
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_TAGS));
-            KeyboardRow secondRow = new KeyboardRow();
-            secondRow.add(new KeyboardButton("Изменить текст"));
-            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
-            keyboard.add(firstRow);
-            keyboard.add(secondRow);
-        }else if (userState == State.AWAITING_TAG_FOR_FILTER){
-            KeyboardRow firstRow = new KeyboardRow();
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
-            keyboard.add(firstRow);
+            KeyboardRow row = new KeyboardRow();
+            row.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
+            row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(row);
         } else if (userState == State.AWAITING_NOTE_TEXT) {
-            KeyboardRow firstRow = new KeyboardRow();
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
-            keyboard.add(firstRow);
+            KeyboardRow row = new KeyboardRow();
+            row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(row);
         } else {
-            KeyboardRow firstRow = new KeyboardRow();
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_NOTE));
-            firstRow.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
-
-            KeyboardRow secondRow = new KeyboardRow();
-            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.FILTER_BY_TAG));
-            secondRow.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
-
-            keyboard.add(firstRow);
-            keyboard.add(secondRow);
+            KeyboardRow row1 = new KeyboardRow();
+            row1.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_NOTE));
+            row1.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
+            KeyboardRow row2 = new KeyboardRow();
+            row2.add(new KeyboardButton(BotLogic.ButtonLabels.FILTER_BY_TAG));
+            row2.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
+            keyboard.add(row1);
+            keyboard.add(row2);
         }
 
-        replyKeyboardMarkup.setKeyboard(keyboard);
-        sendMessage.setReplyMarkup(replyKeyboardMarkup);
+        markup.setKeyboard(keyboard);
+        sendMessage.setReplyMarkup(markup);
     }
-
     /**
-     * Возвращает имя пользователя Telegram-бота.
-     * @return строка с именем бота
+     * Возвращает имя пользователя бота, используемое при регистрации.
      */
     @Override
     public String getBotUsername() {
         return "JavaVoice";
     }
-
     /**
-     * Возвращает токен
-     * <p>Токен должен быть заранее установлен в системное свойство {@code TelegramToken}.</p>
-     * @return строка с токеном бота
+     * Возвращает токен пользователя бота.
      */
     @Override
     public String getBotToken() {
-        return System.getProperty("TelegramToken");
+        return System.getProperty("TOKEN_TELEGRAM");
     }
 }
+
