@@ -1,7 +1,9 @@
 package org.example;
 
+
 import org.example.bots.TelegramBot;
 import org.example.bots.DiscordBot;
+
 
 public class Main {
     public static void main(String[] args) {
@@ -13,6 +15,8 @@ public class Main {
                 e.printStackTrace();
             }
         }, "DiscordBot-Thread");
+
+
         Thread telegramThread = new Thread(() -> {
             try {
                 new TelegramBot().start();
@@ -21,8 +25,12 @@ public class Main {
                 e.printStackTrace();
             }
         }, "TelegramBot-Thread");
+
+
         discordThread.start();
         telegramThread.start();
+
+
         try {
             discordThread.join();
             telegramThread.join();

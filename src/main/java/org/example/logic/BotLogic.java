@@ -433,14 +433,14 @@ public class BotLogic {
         switch (input) {
             case "/start":
                 return "Привет! Я помогу тебе сохранять и просматривать заметки. Используй кнопки ниже.";
-
+            case "/new_note":
             case ButtonLabels.NEW_NOTE:
                 userStates.put(userId, State.AWAITING_NOTE_TEXT);
                 return "Отправьте текст заметки.";
-
+            case "/all_note":
             case ButtonLabels.NOTES_LIST:
                 return showAllNotes(userId);
-
+            case "/filter_tag":
             case ButtonLabels.FILTER_BY_TAG:
                 List<String> tagsWithCounts = noteService.getAllUserTagsWithCounts(userId);
                 if (tagsWithCounts.isEmpty()) {
@@ -456,7 +456,7 @@ public class BotLogic {
                     return "У вас пока нет тегов.";
                 }
                 return "Доступные теги:\n" + String.join("\n", allTags);
-
+            case "/edit_note":
             case ButtonLabels.EDIT_NOTE:
                 return promptNoteSelection(userId);
 

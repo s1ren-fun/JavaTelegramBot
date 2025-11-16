@@ -1,129 +1,131 @@
 package org.example.bots;
 
-import org.example.logic.BotLogic;
-import org.example.logic.BotLogic.State;
+import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
-import net.dv8tion.jda.api.entities.Activity;
-import net.dv8tion.jda.api.entities.User;
+import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
-import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.components.buttons.Button;
-import net.dv8tion.jda.api.interactions.components.ActionRow;
 import net.dv8tion.jda.api.requests.GatewayIntent;
+import net.dv8tion.jda.api.utils.cache.CacheFlag;
+import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
-import javax.annotation.Nonnull;
-import java.util.ArrayList;
-import java.util.List;
+import org.example.logic.BotLogic;
 
+import java.util.EnumSet;
+import java.util.concurrent.CountDownLatch;
 /**
- * Discord-бот, реализующий ту же, что и Telegram-версия.
- * <p>
- * - Обрабатывает текстовые сообщения (пользователь вводит команды/тексты).
- * - Отправляет сообщения с набором кнопок (components) в зависимости от состояния пользователя.
- * - Обрабатывает нажатия на кнопки и делегирует всё в BotLogic.
- * </p>
+ * Простой Discord-бот на JDA, использующий {@link org.example.logic.BotLogic}
+ * для обработки сообщений и slash-команд.
  */
 public class DiscordBot extends ListenerAdapter {
+    private final String token;
     private final BotLogic logicBot = new BotLogic();
+
+    public DiscordBot() {
+        this.token =  System.getProperty("TOKEN_DISCORD");
+    }
+
+    /**
+     * Запускает JDA и регистрирует slash-команды.
+     * Проверяет токен, настраивает intents, строит клиент, ждёт готовности и
+     * блокирует поток, чтобы процесс не завершился.
+     * @throws Exception при ошибках инициализации JDA
+     * @throws IllegalStateException если токен не задан
+     */
     public void start() throws Exception {
-        String token = System.getProperty("DiscordToken");
         if (token == null || token.isBlank()) {
-            throw new IllegalStateException("DiscordToken system property is not set. Запустите JVM с -DDiscordToken=YOUR_TOKEN");
+            throw new IllegalStateException("Discord token не задан.");
         }
-        System.out.println("Starting Discord bot...");
-        net.dv8tion.jda.api.JDA jda = JDABuilder.createDefault(
-                        token,
-                        GatewayIntent.GUILD_MESSAGES,
-                        GatewayIntent.DIRECT_MESSAGES,
-                        GatewayIntent.MESSAGE_CONTENT
-                )
-                .setActivity(Activity.playing("with notes"))
+        EnumSet<GatewayIntent> intents = EnumSet.of(
+                GatewayIntent.GUILD_MESSAGES,
+                GatewayIntent.MESSAGE_CONTENT,
+                GatewayIntent.DIRECT_MESSAGES
+        );
+        JDA jda = JDABuilder.createDefault(token, intents)
+                .disableCache(CacheFlag.VOICE_STATE, CacheFlag.SCHEDULED_EVENTS, CacheFlag.EMOJI, CacheFlag.STICKER)
                 .addEventListeners(this)
                 .build();
+        jda.updateCommands().addCommands(
+                Commands.slash("start", "Start the bot"),
+                Commands.slash("new_note", "Создание заметка"),
+                Commands.slash("all_note", "Показать все ваши заметки"),
+                Commands.slash("edit_note", "Изменение заметки"),
+                Commands.slash("filter_tag", "Фильтрация по вашим тегам")
+        ).queue();
         jda.awaitReady();
-        System.out.println("Discord bot ready.");
-        final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            System.out.println("Shutting down Discord bot...");
-            try {
-                jda.shutdown();
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                latch.countDown();
-            }
-        }));
-
+        CountDownLatch latch = new CountDownLatch(1);
         latch.await();
-        System.out.println("Discord bot stopped.");
     }
 
     /**
-     * Обрабатываем входящее текстовое сообщение от пользователя (в канале или DM).
+     * Обрабатывает входящее текстовое сообщение.
+     * Игнорирует сообщения от ботов и пустые сообщения, вызывает {@link org.example.logic.BotLogic#handleCommand(long, String)}
+     * и отправляет ответ в тот же канал.
+     * @param event событие получения сообщения
      */
     @Override
-    public void onMessageReceived(@Nonnull MessageReceivedEvent event) {
-        // игнорируем сообщения от ботов (включая самого себя)
-        if (event.getAuthor().isBot()) return;
-        String text = event.getMessage().getContentRaw();
-        long userId = event.getAuthor().getIdLong();
-        String response = logicBot.handleCommand(userId, text == null ? "" : text);
-        List<ActionRow> rows = buildActionRowsForUser(userId);
-        if (rows.isEmpty()) {
-            event.getChannel().sendMessage(response).queue();
-        } else {
-            event.getChannel().sendMessage(response).setActionRows(rows).queue();
+    public void onMessageReceived(MessageReceivedEvent event) {
+        try {
+            String content = event.getMessage() != null ? event.getMessage().getContentRaw() : null;
+
+            if (event.getAuthor() == null || event.getAuthor().isBot()) return;
+            if (content == null) return;
+
+            String userIdStr = event.getAuthor().getId();
+            long userIdLong = 0;
+            try { userIdLong = Long.parseLong(userIdStr); } catch (Exception ignored) {}
+
+            MessageChannel channel = event.getChannel();
+
+            String response;
+            response = logicBot.handleCommand(userIdLong, content);
+
+            BotLogic.State userState = logicBot.getUserState(userIdLong);
+            StringBuilder sb = new StringBuilder();
+            if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE) {
+                sb.append("- ").append(BotLogic.ButtonLabels.DELETE_NOTE).append("\n");
+                sb.append("- ").append(BotLogic.ButtonLabels.CANCEL).append("\n");
+            } else if (userState == BotLogic.State.AWAITING_NOTE_TEXT) {
+                sb.append("- ").append(BotLogic.ButtonLabels.CANCEL).append("\n");
+            } else {
+                sb.append("- ").append(BotLogic.ButtonLabels.NEW_NOTE).append("\n");
+                sb.append("- ").append(BotLogic.ButtonLabels.NOTES_LIST).append("\n");
+                sb.append("- ").append(BotLogic.ButtonLabels.FILTER_BY_TAG).append("\n");
+                sb.append("- ").append(BotLogic.ButtonLabels.EDIT_NOTE).append("\n");
+            }
+
+            String toSend = response + "\n\n" + sb;
+
+            channel.sendMessage(toSend).queue();
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
-
     /**
-     * Обрабатываем нажатия на кнопки (Button Interactions).
-     * При нажатии мы вызываем BotLogic.handleCommand(userId, label).
+     * Обрабатывает slash-команду.
+     * Передаёт имя команды в {@link org.example.logic.BotLogic#handleCommand(long, String)}
+     * и отвечает пользователю.
+     * @param event событие slash-команды
      */
     @Override
-    public void onButtonInteraction(@Nonnull ButtonInteractionEvent event) {
-        User user = event.getUser();
-        long userId = user.getIdLong();
-        String componentId = event.getComponentId(); // мы используем componentId == label для простоты
-        String response = logicBot.handleCommand(userId, componentId);
-        event.reply(response).setActionRows(buildActionRowsForUser(userId)).queue();
-    }
+    public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
+        try {
+            String userIdStr = event.getUser().getId();
+            long userIdLong = 0;
+            try { userIdLong = Long.parseLong(userIdStr); } catch (Exception ignored) {}
 
-    /**
-     * Строит список ActionRow (строк кнопок) в зависимости от состояния пользователя,
-     * Мы используем Button.primary/secondary и устанавливаем componentId равным
-     * тексу кнопки (чтобы BotLogic получал одинаковые метки).
-     */
-    private List<ActionRow> buildActionRowsForUser(long userId) {
-        State userState = logicBot.getUserState(userId);
-        List<ActionRow> rows = new ArrayList<>();
+            String response;
+            response = logicBot.handleCommand(userIdLong, "/" + event.getName());
 
-        if (userState == State.AWAITING_ACTION_ON_NOTE) {
-            Button delete = Button.primary(BotLogic.ButtonLabels.DELETE_NOTE, BotLogic.ButtonLabels.DELETE_NOTE);
-            Button editTags = Button.primary(BotLogic.ButtonLabels.EDIT_TAGS, BotLogic.ButtonLabels.EDIT_TAGS);
-            Button editText = Button.primary("EDIT_TEXT", "Изменить текст"); // локальная метка
-            Button cancel = Button.danger(BotLogic.ButtonLabels.CANCEL, BotLogic.ButtonLabels.CANCEL);
 
-            rows.add(ActionRow.of(delete, editTags));
-            rows.add(ActionRow.of(editText, cancel));
-        } else if (userState == State.AWAITING_TAG_FOR_FILTER) {
-            Button cancel = Button.danger(BotLogic.ButtonLabels.CANCEL, BotLogic.ButtonLabels.CANCEL);
-            rows.add(ActionRow.of(cancel));
-        } else if (userState == State.AWAITING_NOTE_TEXT) {
-            Button cancel = Button.danger(BotLogic.ButtonLabels.CANCEL, BotLogic.ButtonLabels.CANCEL);
-            rows.add(ActionRow.of(cancel));
-        } else {
-            Button newNote = Button.primary(BotLogic.ButtonLabels.NEW_NOTE, BotLogic.ButtonLabels.NEW_NOTE);
-            Button notesList = Button.primary(BotLogic.ButtonLabels.NOTES_LIST, BotLogic.ButtonLabels.NOTES_LIST);
-            Button filterByTag = Button.primary(BotLogic.ButtonLabels.FILTER_BY_TAG, BotLogic.ButtonLabels.FILTER_BY_TAG);
-            Button editNote = Button.primary(BotLogic.ButtonLabels.EDIT_NOTE, BotLogic.ButtonLabels.EDIT_NOTE);
+            event.reply(response).setEphemeral(false).queue();
 
-            rows.add(ActionRow.of(newNote, notesList));
-            rows.add(ActionRow.of(filterByTag, editNote));
+        } catch (Exception e) {
+            e.printStackTrace();
+            try { event.reply("Ошибка: " + e.getMessage()).setEphemeral(true).queue(); }
+            catch (Exception ignored) {}
         }
-
-        return rows;
     }
 }
-
