@@ -14,18 +14,22 @@ import java.util.List;
  * всю необходимую функциональность для управления заметками пользователей
  * с возможностью фильтрации по тегам и организации данных.
  * </p>
+ * <p>
+ * Заметки теперь привязаны к {@code login}, а не к {@code userId}, что позволяет
+ * использовать их на разных платформах (Telegram, Discord) при входе под одним логином.
+ * </p>
  *
- * @since 1.0
+ * @since 1.1
  */
 public interface NoteService {
     /**
      * Добавляет новую заметку для пользователя.
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param text текст заметки, который может содержать теги в формате #тег
      * @throws SQLException если произошла ошибка при сохранении в базу данных
      */
-    void addNote(long userId, String text) throws SQLException;
+    void addNote(String login, String text) throws SQLException;
 
     /**
      * Получает реальный идентификатор заметки по её порядковому номеру для пользователя.
@@ -33,22 +37,22 @@ public interface NoteService {
      * Порядковые номера начинаются с 1 для первой заметки в списке.
      * </p>
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param index порядковый номер заметки (начиная с 1)
      * @return реальный идентификатор заметки в базе данных или null, если заметка не найдена
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
-    Integer getNoteIdByIndex(long userId, int index) throws SQLException;
+    Integer getNoteIdByIndex(String login, int index) throws SQLException;
 
     /**
      * Получает текст заметки по её идентификатору.
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param noteId идентификатор заметки
      * @return текст заметки или null, если заметка не найдена
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
-    String getNoteTextById(long userId, int noteId) throws SQLException;
+    String getNoteTextById(String login, int noteId) throws SQLException;
 
     /**
      * Получает список тегов для указанной заметки.
@@ -66,12 +70,12 @@ public interface NoteService {
      * обновляя соответствующие связи в базе данных.
      * </p>
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param noteId идентификатор заметки
      * @param newText новый текст заметки
      * @throws SQLException если произошла ошибка при обновлении данных
      */
-    void updateNote(long userId, int noteId, String newText) throws SQLException;
+    void updateNote(String login, int noteId, String newText) throws SQLException;
 
     /**
      * Удаляет заметку пользователя по её идентификатору.
@@ -79,21 +83,21 @@ public interface NoteService {
      * При удалении заметки также удаляются все связанные с ней теги.
      * </p>
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param noteId идентификатор заметки для удаления
      * @throws SQLException если произошла ошибка при удалении данных
      */
-    void deleteNote(long userId, int noteId) throws SQLException;
+    void deleteNote(String login, int noteId) throws SQLException;
 
     /**
      * Получает список всех заметок пользователя, отфильтрованных по указанному тегу.
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @param tag тег для фильтрации в формате "#тег"
      * @return список текстов заметок с указанным тегом
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
-    List<String> getNotesByTag(long userId, String tag) throws SQLException;
+    List<String> getNotesByTag(String login, String tag) throws SQLException;
 
     /**
      * Получает список всех тегов пользователя с количеством заметок для каждого тега.
@@ -101,11 +105,11 @@ public interface NoteService {
      * Каждый элемент списка имеет формат "#тег (количество)".
      * </p>
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @return список строк с тегами и количеством заметок
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
-    List<String> getAllUserTagsWithCounts(long userId) throws SQLException;
+    List<String> getAllUserTagsWithCounts(String login) throws SQLException;
 
     /**
      * Получает список всех заметок пользователя.
@@ -113,9 +117,9 @@ public interface NoteService {
      * Заметки возвращаются в порядке убывания даты создания (последние добавленные - первые).
      * </p>
      *
-     * @param userId идентификатор пользователя
+     * @param login логин пользователя
      * @return список текстов всех заметок пользователя
      * @throws SQLException если произошла ошибка при обращении к базе данных
      */
-    List<String> getAllNotes(long userId) throws SQLException;
+    List<String> getAllNotes(String login) throws SQLException;
 }
