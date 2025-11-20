@@ -1,7 +1,7 @@
 package org.example.bots;
 
+import org.example.entity.Platform;
 import org.example.logic.BotLogic;
-import org.example.logic.BotLogic.State;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -27,15 +27,18 @@ import java.util.concurrent.CountDownLatch;
  */
 public class TelegramBot extends TelegramLongPollingBot {
 
-
+    /**
+     * Экземпляр логики бота, используемый для обработки команд и состояний.
+     */
     private final BotLogic logicBot = new BotLogic();
-/**
- * Инициализирует и регистрирует бота в Telegram API.
- * <p>Метод создаёт экземпляр {@link TelegramBotsApi} и регистрирует текущий бот. Для удержания
- * потока работы приложения используется {@link java.util.concurrent.CountDownLatch},
- * который ожидает бесконечно, пока не будет прерван.</p>
- * @throws Exception если регистрация бота в TelegramBotsApi не удалась
- */
+
+    /**
+     * Инициализирует и регистрирует бота в Telegram API.
+     * <p>Метод создаёт экземпляр {@link TelegramBotsApi} и регистрирует текущий бот. Для удержания
+     * потока работы приложения используется {@link java.util.concurrent.CountDownLatch},
+     * который ожидает бесконечно, пока не будет прерван.</p>
+     * @throws Exception если регистрация бота в TelegramBotsApi не удалась
+     */
     public void start() throws Exception {
         TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
         botsApi.registerBot(this);
@@ -46,6 +49,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             Thread.currentThread().interrupt();
         }
     }
+
     /**
      * Обрабатывает входящее обновление (update) от Telegram.
      * <p>Поведение:</p>
@@ -53,7 +57,7 @@ public class TelegramBot extends TelegramLongPollingBot {
      * <li>Проверяет, что {@code update}, {@code update.getMessage()} и
      * {@code update.getMessage().getText()} не равны {@code null}; в противном случае — ничего не делает.</li>
      * <li>Извлекает {@code chatId}, {@code userId} и текст сообщения.</li>
-     * <li>Передаёт текст и идентификатор пользователя в {@link BotLogic#handleCommand(long, String)} и получает ответную строку.</li>
+     * <li>Передаёт текст и идентификатор пользователя и получает ответную строку.</li>
      * <li>Формирует {@link SendMessage} с ответом, вызывает {@link #setButtons(SendMessage, long)}
      * для прикрепления клавиатуры, затем пытается выполнить отправку через
      * {@link #execute(org.telegram.telegrambots.meta.api.methods.BotApiMethod)}.</li>
@@ -68,7 +72,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             String chatId = String.valueOf(update.getMessage().getChatId());
             long userId = Long.parseLong(String.valueOf(update.getMessage().getFrom().getId()));
             String text = update.getMessage().getText();
-            String response = logicBot.handleCommand(userId, text);
+            String response = logicBot.handleCommand(userId, text, Platform.TELEGRAM);
             SendMessage message = new SendMessage();
             message.setChatId(chatId);
             message.setText(response);
@@ -82,6 +86,7 @@ public class TelegramBot extends TelegramLongPollingBot {
             e.printStackTrace();
         }
     }
+
     /**
      * Устанавливает ReplyKeyboardMarkup (кнопочную клавиатуру) для сообщения
      * {@code sendMessage} в зависимости от состояния пользователя.
@@ -106,14 +111,15 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         List<KeyboardRow> keyboard = new ArrayList<>();
 
-        State userState = logicBot.getUserState(userId);
+        BotLogic.State userState = logicBot.getUserState(userId);
 
-        if (userState == State.AWAITING_ACTION_ON_NOTE) {
+        if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE) {
             KeyboardRow row = new KeyboardRow();
             row.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
+            row.add(new KeyboardButton(BotLogic.ButtonLabels.CONVERT_TO_REMINDER));
             row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
             keyboard.add(row);
-        } else if (userState == State.AWAITING_NOTE_TEXT) {
+        } else if (userState == BotLogic.State.AWAITING_NOTE_TEXT) {
             KeyboardRow row = new KeyboardRow();
             row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
             keyboard.add(row);
@@ -124,26 +130,33 @@ public class TelegramBot extends TelegramLongPollingBot {
             KeyboardRow row2 = new KeyboardRow();
             row2.add(new KeyboardButton(BotLogic.ButtonLabels.FILTER_BY_TAG));
             row2.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
+            KeyboardRow row3 = new KeyboardRow();
+            row3.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_REMINDER));
+            row3.add(new KeyboardButton(BotLogic.ButtonLabels.MY_REMINDERS));
             keyboard.add(row1);
             keyboard.add(row2);
+            keyboard.add(row3);
         }
 
         markup.setKeyboard(keyboard);
         sendMessage.setReplyMarkup(markup);
     }
+
     /**
      * Возвращает имя пользователя бота, используемое при регистрации.
+     * @return имя пользователя бота
      */
     @Override
     public String getBotUsername() {
         return "JavaVoice";
     }
+
     /**
      * Возвращает токен пользователя бота.
+     * @return токен бота, извлекаемый из системного свойства {@code TOKEN_TELEGRAM}
      */
     @Override
     public String getBotToken() {
         return System.getProperty("TOKEN_TELEGRAM");
     }
 }
-

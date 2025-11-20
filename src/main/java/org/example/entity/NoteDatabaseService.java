@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * Сервис для работы с базой данных заметок пользователей.
  * <p>
  * Использует SQLite в качестве СУБД и хранит заметки в таблице {@code notes},
- * где каждая запись привязана к уникальному идентификатору пользователя (например, Telegram ID).
+ * где каждая запись привязана к уникальному логину пользователя.
  * <p>
  * Поддерживает операции:
  * </p>
@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
  *     <li>Проверка существования заметки у пользователя</li>
  * </ul>
  *
- * @since 1.0
+ * @since 1.1
  */
 public class NoteDatabaseService implements NoteService {
 
@@ -62,7 +62,7 @@ public class NoteDatabaseService implements NoteService {
      * Структура таблиц:
      * </p>
      * <ul>
-     *     <li>{@code notes}: {@code id} (PK), {@code user_id}, {@code text}</li>
+     *     <li>{@code notes}: {@code id} (PK), {@code login}, {@code text}</li>
      *     <li>{@code note_tags}: {@code id} (PK), {@code note_id} (FK → notes.id), {@code tag}</li>
      * </ul>
      * <p>
@@ -78,7 +78,7 @@ public class NoteDatabaseService implements NoteService {
             String createNotes = """
                 CREATE TABLE IF NOT EXISTS notes (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    user_id BIGINT NOT NULL,
+                    login TEXT NOT NULL,
                     text TEXT NOT NULL
                 );
                 """;
@@ -103,12 +103,13 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    public void addNote(long userId, String text) throws SQLException {
-        String sqlNote = "INSERT INTO notes (user_id, text) VALUES (?, ?)";
+    @Override
+    public void addNote(String login, String text) throws SQLException {
+        String sqlNote = "INSERT INTO notes (login, text) VALUES (?, ?)";
         try (Connection conn = DriverManager.getConnection(dbUrl)) {
             conn.setAutoCommit(false);
             try (PreparedStatement pstmt = conn.prepareStatement(sqlNote, Statement.RETURN_GENERATED_KEYS)) {
-                pstmt.setLong(1, userId);
+                pstmt.setString(1, login);
                 pstmt.setString(2, text);
                 pstmt.executeUpdate();
 
@@ -123,16 +124,52 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    public List<String> getAllNotes(long userId) throws SQLException {
-        return getNotesByTag(userId, null);
+    @Override
+    public List<String> getNotesByTag(String login, String tag) throws SQLException {
+        List<String> notes = new ArrayList<>();
+        if (tag == null || tag.trim().isEmpty()) {
+            String sql = "SELECT text FROM notes WHERE login = ? ORDER BY id";
+            try (Connection conn = DriverManager.getConnection(dbUrl);
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setString(1, login);
+                ResultSet rs = pstmt.executeQuery();
+                while (rs.next()) {
+                    notes.add(rs.getString("text"));
+                }
+            }
+        } else {
+            String sql = """
+                SELECT DISTINCT n.text
+                FROM notes n
+                JOIN note_tags nt ON n.id = nt.note_id
+                WHERE n.login = ? AND nt.tag = ?
+                ORDER BY n.id
+                """;
+            try (Connection conn = DriverManager.getConnection(dbUrl);
+                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
+                pstmt.setString(1, login);
+                pstmt.setString(2, tag.toLowerCase());
+                ResultSet rs = pstmt.executeQuery();
+                while (rs.next()) {
+                    notes.add(rs.getString("text"));
+                }
+            }
+        }
+        return notes;
     }
 
-    public String getNoteTextById(long userId, int noteId) throws SQLException {
-        String sql = "SELECT text FROM notes WHERE id = ? AND user_id = ?";
+    @Override
+    public List<String> getAllNotes(String login) throws SQLException {
+        return getNotesByTag(login, null);
+    }
+
+    @Override
+    public String getNoteTextById(String login, int noteId) throws SQLException {
+        String sql = "SELECT text FROM notes WHERE id = ? AND login = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, noteId);
-            pstmt.setLong(2, userId);
+            pstmt.setString(2, login);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 return rs.getString("text");
@@ -141,16 +178,32 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    public void updateNote(long userId, int noteId, String newText) throws SQLException {
-        if (!noteExists(userId, noteId)) return;
+    @Override
+    public List<String> getTagsForNote(int noteId) throws SQLException {
+        List<String> tags = new ArrayList<>();
+        String sql = "SELECT tag FROM note_tags WHERE note_id = ? ORDER BY id";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setInt(1, noteId);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                tags.add(rs.getString("tag"));
+            }
+        }
+        return tags;
+    }
 
-        String sql = "UPDATE notes SET text = ? WHERE id = ? AND user_id = ?";
+    @Override
+    public void updateNote(String login, int noteId, String newText) throws SQLException {
+        if (!noteExists(login, noteId)) return;
+
+        String sql = "UPDATE notes SET text = ? WHERE id = ? AND login = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl)) {
             conn.setAutoCommit(false);
             try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
                 pstmt.setString(1, newText);
                 pstmt.setInt(2, noteId);
-                pstmt.setLong(3, userId);
+                pstmt.setString(3, login);
                 int updated = pstmt.executeUpdate();
                 if (updated > 0) {
                     List<String> newTags = extractTags(newText);
@@ -161,42 +214,76 @@ public class NoteDatabaseService implements NoteService {
         }
     }
 
-    public void deleteNote(long userId, int noteId) throws SQLException {
-        String sql = "DELETE FROM notes WHERE id = ? AND user_id = ?";
+    @Override
+    public void deleteNote(String login, int noteId) throws SQLException {
+        String sql = "DELETE FROM notes WHERE id = ? AND login = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, noteId);
-            pstmt.setLong(2, userId);
+            pstmt.setString(2, login);
             pstmt.executeUpdate();
         }
+    }
+
+    @Override
+    public List<String> getAllUserTagsWithCounts(String login) throws SQLException {
+        List<String> result = new ArrayList<>();
+        String sql = """
+            SELECT nt.tag, COUNT(*) as cnt
+            FROM note_tags nt
+            JOIN notes n ON nt.note_id = n.id
+            WHERE n.login = ?
+            GROUP BY nt.tag
+            ORDER BY nt.tag
+            """;
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setString(1, login);
+            ResultSet rs = pstmt.executeQuery();
+            while (rs.next()) {
+                String tag = rs.getString("tag");
+                int count = rs.getInt("cnt");
+                String suffix;
+                if (count % 10 == 1 && count % 100 != 11) {
+                    suffix = "заметка";
+                } else if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) {
+                    suffix = "заметки";
+                } else {
+                    suffix = "заметок";
+                }
+                result.add(tag + " — " + count + " " + suffix);
+            }
+        }
+        return result;
     }
 
     /**
      * Проверяет, существует ли заметка с указанным идентификатором у данного пользователя.
      *
-     * @param userId идентификатор пользователя
+     * @param login  логин пользователя
      * @param noteId идентификатор заметки
      * @return {@code true}, если заметка существует и принадлежит пользователю; {@code false} — иначе
      * @throws SQLException если произошла ошибка при выполнении SQL-запроса
      */
-    public boolean noteExists(long userId, int noteId) throws SQLException {
-        String sql = "SELECT 1 FROM notes WHERE id = ? AND user_id = ?";
+    public boolean noteExists(String login, int noteId) throws SQLException {
+        String sql = "SELECT 1 FROM notes WHERE id = ? AND login = ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
             pstmt.setInt(1, noteId);
-            pstmt.setLong(2, userId);
+            pstmt.setString(2, login);
             return pstmt.executeQuery().next();
         }
     }
 
-    public Integer getNoteIdByIndex(long userId, int index) throws SQLException {
+    @Override
+    public Integer getNoteIdByIndex(String login, int index) throws SQLException {
         if (index < 1) return null;
 
-        String sql = "SELECT id FROM notes WHERE user_id = ? ORDER BY id LIMIT 1 OFFSET ?";
+        String sql = "SELECT id FROM notes WHERE login = ? ORDER BY id LIMIT 1 OFFSET ?";
         try (Connection conn = DriverManager.getConnection(dbUrl);
              PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setLong(1, userId);
-            pstmt.setInt(2, index - 1); // OFFSET начинается с 0
+            pstmt.setString(1, login);
+            pstmt.setInt(2, index - 1);
             ResultSet rs = pstmt.executeQuery();
             if (rs.next()) {
                 return rs.getInt("id");
@@ -264,83 +351,5 @@ public class NoteDatabaseService implements NoteService {
             ps.executeUpdate();
         }
         saveTagsForNote(conn, noteId, newTags);
-    }
-
-    public List<String> getTagsForNote(int noteId) throws SQLException {
-        List<String> tags = new ArrayList<>();
-        String sql = "SELECT tag FROM note_tags WHERE note_id = ? ORDER BY id";
-        try (Connection conn = DriverManager.getConnection(dbUrl);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setInt(1, noteId);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                tags.add(rs.getString("tag"));
-            }
-        }
-        return tags;
-    }
-
-    public List<String> getNotesByTag(long userId, String tag) throws SQLException {
-        List<String> notes = new ArrayList<>();
-        if (tag == null || tag.trim().isEmpty()) {
-            String sql = "SELECT text FROM notes WHERE user_id = ? ORDER BY id";
-            try (Connection conn = DriverManager.getConnection(dbUrl);
-                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setLong(1, userId);
-                ResultSet rs = pstmt.executeQuery();
-                while (rs.next()) {
-                    notes.add(rs.getString("text"));
-                }
-            }
-        } else {
-            String sql = """
-                SELECT DISTINCT n.text
-                FROM notes n
-                JOIN note_tags nt ON n.id = nt.note_id
-                WHERE n.user_id = ? AND nt.tag = ?
-                ORDER BY n.id
-                """;
-            try (Connection conn = DriverManager.getConnection(dbUrl);
-                 PreparedStatement pstmt = conn.prepareStatement(sql)) {
-                pstmt.setLong(1, userId);
-                pstmt.setString(2, tag.toLowerCase());
-                ResultSet rs = pstmt.executeQuery();
-                while (rs.next()) {
-                    notes.add(rs.getString("text"));
-                }
-            }
-        }
-        return notes;
-    }
-
-    public List<String> getAllUserTagsWithCounts(long userId) throws SQLException {
-        List<String> result = new ArrayList<>();
-        String sql = """
-            SELECT nt.tag, COUNT(*) as cnt
-            FROM note_tags nt
-            JOIN notes n ON nt.note_id = n.id
-            WHERE n.user_id = ?
-            GROUP BY nt.tag
-            ORDER BY nt.tag
-            """;
-        try (Connection conn = DriverManager.getConnection(dbUrl);
-             PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setLong(1, userId);
-            ResultSet rs = pstmt.executeQuery();
-            while (rs.next()) {
-                String tag = rs.getString("tag");
-                int count = rs.getInt("cnt");
-                String suffix;
-                if (count % 10 == 1 && count % 100 != 11) {
-                    suffix = "заметка";
-                } else if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 10 || count % 100 >= 20)) {
-                    suffix = "заметки";
-                } else {
-                    suffix = "заметок";
-                }
-                result.add(tag + " — " + count + " " + suffix);
-            }
-        }
-        return result;
     }
 }
