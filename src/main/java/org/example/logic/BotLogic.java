@@ -7,6 +7,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -269,6 +271,18 @@ public class BotLogic {
         }
     }
 
+    /**
+     * Обрабатывает ввод пользователя с датой и временем для напоминания, созданного из заметки.
+     * <p>
+     * Метод извлекает текст заметки, сохранённый в {@link #userPendingReminderText},
+     * парсит строку даты/времени, и создаёт новое напоминание через {@link #reminderService}.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая дату и время в формате "dd.MM.yyyy HH:mm"
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderTimeFromNote(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -298,6 +312,22 @@ public class BotLogic {
         return "Напоминание создано из заметки!\nВы получите уведомление " + time.format(DateTimeFormatter.ofPattern("dd MMMM в HH:mm")) + ".";
     }
 
+    /**
+     * Обрабатывает ввод пользователя с логином при команде /start.
+     * <p>
+     * Метод проверяет, существует ли пользователь с таким логином в базе данных.
+     * Если существует, загружает его данные (Telegram ID, Discord ID, часовой пояс).
+     * Затем устанавливает или обновляет ID платформы, с которой был выполнен вход
+     * ({@code userId} как {@code telegramId} или {@code discordId} в зависимости от {@code platform}).
+     * Обновлённая информация о пользователе сохраняется в базу данных через {@link #userService}.
+     * </p>
+     *
+     * @param userId   идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input    строка, содержащая логин
+     * @param platform платформа, с которой пришёл запрос ({@link Platform#TELEGRAM} или {@link Platform#DISCORD})
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleLogin(long userId, String input, Platform platform) throws SQLException {
         String login = input.trim();
         if (login.isEmpty()) {
@@ -326,6 +356,19 @@ public class BotLogic {
         return "Добро пожаловать, " + login + "! Вы можете использовать бота.";
     }
 
+    /**
+     * Обрабатывает ввод пользователя с текстом новой заметки.
+     * <p>
+     * Метод проверяет, авторизован ли пользователь (наличие {@code login} в {@link #userPendingLogin}).
+     * Если пользователь авторизован, текст заметки сохраняется через {@link #noteService},
+     * состояние пользователя сбрасывается, и возвращается сообщение об успешном сохранении.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая текст заметки
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleNoteText(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -342,6 +385,20 @@ public class BotLogic {
         return "Заметка сохранена!";
     }
 
+    /**
+     * Обрабатывает ввод пользователя с текстом нового напоминания.
+     * <p>
+     * Метод проверяет, авторизован ли пользователь (наличие {@code login} в {@link #userPendingLogin}).
+     * Если пользователь авторизован, текст напоминания сохраняется во временное хранилище {@link #userPendingReminderText},
+     * состояние пользователя изменяется на {@link State#AWAITING_REMINDER_TIME},
+     * и возвращается просьба ввести дату и время.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая текст напоминания
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderText(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -354,6 +411,19 @@ public class BotLogic {
         return "Укажите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ (например: 30.10.2025 14:00)";
     }
 
+    /**
+     * Обрабатывает ввод пользователя с датой и временем для нового напоминания.
+     * <p>
+     * Метод извлекает текст напоминания, сохранённый в {@link #userPendingReminderText},
+     * парсит строку даты/времени, и создаёт новое напоминание через {@link #reminderService}.
+     * </p>
+
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая дату и время в формате "dd.MM.yyyy HH:mm"
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderTime(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         String text = userPendingReminderText.get(userId);
@@ -379,6 +449,21 @@ public class BotLogic {
         return "Напоминание сохранено!\nВы получите уведомление " + time.format(DateTimeFormatter.ofPattern("dd MMMM в HH:mm")) + ".";
     }
 
+    /**
+     * Обрабатывает выбор действия над напоминанием (изменить текст, изменить дату/время, удалить).
+     * <p>
+     * Метод извлекает идентификатор напоминания из {@link #userPendingReminderId},
+     * находит соответствующее напоминание в списке, полученном от {@link #reminderService}.
+     * В зависимости от ввода пользователя ({@code input}) устанавливает следующее состояние
+     * ({@link State#AWAITING_REMINDER_EDIT_TEXT}, {@link State#AWAITING_REMINDER_EDIT_TIME},
+     * {@link State#AWAITING_REMINDER_DELETE_CONFIRMATION}) и возвращает соответствующее сообщение.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая команду действия ("Изменить текст", "Изменить дату/время", "Удалить")
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderEditAction(long userId, String input) throws SQLException {
         int reminderId = userPendingReminderId.get(userId);
         String login = userPendingLogin.get(userId);
@@ -420,6 +505,19 @@ public class BotLogic {
         };
     }
 
+    /**
+     * Обрабатывает ввод пользователя с новой датой и временем для напоминания.
+     * <p>
+     * Метод извлекает идентификатор напоминания из {@link #userPendingReminderId},
+     * находит соответствующее напоминание в списке, полученном от {@link #reminderService},
+     * парсит строку новой даты/времени, и обновляет напоминание через {@link #reminderService}.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая новую дату и время в формате "dd.MM.yyyy HH:mm"
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderEditTime(long userId, String input) throws SQLException {
         int reminderId = userPendingReminderId.get(userId);
         String login = userPendingLogin.get(userId);
@@ -458,6 +556,20 @@ public class BotLogic {
         return "Время напоминания обновлено! Новое время: " + time.format(DateTimeFormatter.ofPattern("dd MMMM в HH:mm")) + ".";
     }
 
+    /**
+     * Обрабатывает ввод пользователя с новым текстом для напоминания.
+     * <p>
+     * Метод извлекает идентификатор напоминания из {@link #userPendingReminderId},
+     * находит соответствующее напоминание в списке, полученном от {@link #reminderService},
+     * и обновляет его текст через {@link #reminderService}.
+     * Время напоминания остаётся неизменным.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая новый текст напоминания
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderEditText(long userId, String input) throws SQLException {
         int reminderId = userPendingReminderId.get(userId);
         String login = userPendingLogin.get(userId);
@@ -489,7 +601,21 @@ public class BotLogic {
         return "Текст напоминания обновлён!";
     }
 
-
+    /**
+     * Обрабатывает подтверждение удаления напоминания.
+     * <p>
+     * Метод проверяет ввод пользователя ({@code input}).
+     * Если введено "да" (регистронезависимо), напоминание с ID из {@link #userPendingReminderId}
+     * удаляется через {@link #reminderService}, и возвращается сообщение об удалении.
+     * Если введено "нет" (регистронезависимо), удаление отменяется, и возвращается соответствующее сообщение.
+     * В противном случае возвращается просьба ввести "да" или "нет".
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая подтверждение ("да" или "нет")
+     * @return строка с ответом для пользователя (успех, отмена или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleReminderDeleteConfirmation(long userId, String input) throws SQLException {
         int reminderId = userPendingReminderId.get(userId);
         String login = userPendingLogin.get(userId);
@@ -513,6 +639,22 @@ public class BotLogic {
         }
     }
 
+    /**
+     * Обрабатывает выбор номера заметки для преобразования в напоминание.
+     * <p>
+     * Метод проверяет, авторизован ли пользователь (наличие {@code login} в {@link #userPendingLogin}).
+     * Если пользователь авторизован, проверяется, является ли ввод ({@code input}) числом.
+     * Если да, извлекается текст заметки с указанным индексом через {@link #noteService}.
+     * Если заметка найдена, её текст сохраняется во временное хранилище {@link #userPendingReminderText},
+     * состояние пользователя изменяется на {@link State#AWAITING_REMINDER_TIME},
+     * и возвращается просьба ввести дату и время для нового напоминания.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая номер заметки
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleSelectNoteForReminder(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -541,7 +683,14 @@ public class BotLogic {
         return "Вы выбрали заметку:\n\"" + noteText + "\"\n\nУкажите дату и время в формате ДД.ММ.ГГГГ ЧЧ:ММ (например: 30.10.2025 14:00)";
     }
 
-
+    /**
+     * Обрабатывает команды главного меню, когда пользователь не находится в специальном состоянии.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  команда или текст от пользователя
+     * @return ответное сообщение для отправки пользователю
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleMainMenu(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
 
@@ -589,7 +738,19 @@ public class BotLogic {
         }
     }
 
-
+    /**
+     * Возвращает строку с форматированным списком всех запланированных напоминаний пользователя.
+     * <p>
+     * Метод извлекает список напоминаний для указанного {@code login} через {@link #reminderService}.
+     * Если список пуст, возвращается соответствующее сообщение.
+     * В противном случае формируется строка с нумерованным списком напоминаний,
+     * содержащим текст и дату/время напоминания в формате "dd.MM.yyyy HH:mm".
+     * </p>
+     *
+     * @param login логин пользователя
+     * @return строка с форматированным списком напоминаний или сообщением об их отсутствии
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String showUserReminders(String login) throws SQLException {
         List<Reminder> reminders = reminderService.getUserReminders(login);
         if (reminders.isEmpty()) {
@@ -606,6 +767,20 @@ public class BotLogic {
         return sb + "\n\nВведите номер напоминания для действий (изменить/удалить).";
     }
 
+    /**
+     * Возвращает строку с запросом на выбор номера заметки для преобразования в напоминание.
+     * <p>
+     * Метод проверяет, авторизован ли пользователь (наличие {@code login} в {@link #userPendingLogin}).
+     * Если пользователь авторизован, извлекает список всех его заметок через {@link #noteService}.
+     * Если список заметок пуст, возвращается соответствующее сообщение.
+     * В противном случае формируется нумерованный список заметок и
+     * состояние пользователя изменяется на {@link State#AWAITING_NOTE_ID_FOR_REMINDER}.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @return строка с запросом выбрать номер заметки или сообщение об ошибке
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String promptNoteToConvert(long userId) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -623,6 +798,19 @@ public class BotLogic {
         return "Выберите номер заметки, чтобы сделать из неё напоминание:\n" + list;
     }
 
+    /**
+     * Обрабатывает выбор заметки для редактирования (текста или тегов).
+     * <p>
+     * Если ввод — число, загружается заметка и отображаются её данные.
+     * Если ввод — команда действия («Изменить теги», «Удалить заметку»),
+     * выполняется соответствующий переход в новое состояние.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  ввод пользователя (номер заметки или команда действия)
+     * @return ответное сообщение
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleEditNoteSelection(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -666,6 +854,14 @@ public class BotLogic {
         return "Неизвестная команда. Выберите действие.";
     }
 
+    /**
+     * Обновляет текст выбранной заметки.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  новый текст заметки
+     * @return сообщение об успешном обновлении или ошибке
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleNoteTextUpdate(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -684,6 +880,14 @@ public class BotLogic {
         return "Заметка обновлена!";
     }
 
+    /**
+     * Обрабатывает выбор заметки для удаления.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  номер заметки
+     * @return сообщение с подтверждением удаления или ошибкой
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleDeleteNoteSelection(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -706,6 +910,13 @@ public class BotLogic {
         return "Введите корректный номер заметки.";
     }
 
+    /**
+     * Обрабатывает подтверждение удаления заметки.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  «да» или «нет»
+     * @return результат операции
+     */
     private String handleDeleteConfirmation(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -731,6 +942,17 @@ public class BotLogic {
         }
     }
 
+    /**
+     * Фильтрует заметки по выбранному тегу.
+     * <p>
+     * Поддерживает специальное значение «Все заметки» для отмены фильтрации.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  тег или команда «Все заметки»
+     * @return список заметок с указанным тегом или сообщение об отсутствии
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleTagFilter(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -752,6 +974,14 @@ public class BotLogic {
         return String.join("\n", notes);
     }
 
+    /**
+     * Обрабатывает выбор заметки для редактирования её тегов.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  номер заметки
+     * @return запрос на ввод новых тегов или сообщение об ошибке
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleEditTagSelection(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -773,6 +1003,18 @@ public class BotLogic {
         return "Введите корректный номер заметки.";
     }
 
+    /**
+     * Обновляет теги у выбранной заметки.
+     * <p>
+     * Сохраняет оригинальный текст заметки, удаляя из него старые теги,
+     * и добавляет новые теги из ввода пользователя.
+     * </p>
+     *
+     * @param userId идентификатор пользователя
+     * @param input  новые теги или пустая строка для удаления всех
+     * @return сообщение с результатом обновления тегов
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleTagUpdate(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -827,6 +1069,13 @@ public class BotLogic {
         return response.toString();
     }
 
+    /**
+     * Формирует и возвращает список всех заметок пользователя с нумерацией.
+     *
+     * @param login идентификатор пользователя
+     * @return отформатированный список заметок или сообщение об их отсутствии
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String showAllNotes(String login) throws SQLException {
         List<String> notes = noteService.getAllNotes(login);
         if (notes.isEmpty()) {
@@ -837,6 +1086,13 @@ public class BotLogic {
                 .collect(Collectors.joining("\n"));
     }
 
+    /**
+     * Запрашивает у пользователя выбор заметки для редактирования текста.
+     *
+     * @param userId идентификатор пользователя
+     * @return сообщение со списком заметок и запросом на ввод номера
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String promptNoteSelection(long userId) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -854,6 +1110,14 @@ public class BotLogic {
         return "Введите номер заметки для редактирования:" + "\n" + list;
     }
 
+    /**
+     * Обрабатывает выбор действия над выбранной заметкой.
+     *
+     * @param userId идентификатор пользователя
+     * @param input  команда действия
+     * @return ответное сообщение
+     * @throws SQLException если произошла ошибка при обращении к базе данных
+     */
     private String handleNoteActionSelection(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -907,6 +1171,23 @@ public class BotLogic {
         return "Неизвестная команда. Выберите действие из списка.";
     }
 
+    /**
+     * Обрабатывает выбор номера напоминания пользователем для последующего действия (редактирование или удаление).
+     * <p>
+     * Метод проверяет, авторизован ли пользователь (наличие {@code login} в {@link #userPendingLogin}).
+     * Если пользователь авторизован, проверяется, является ли ввод ({@code input}) числом.
+     * Если да, извлекается список напоминаний пользователя через {@link #reminderService}.
+     * Проверяется, существует ли напоминание с индексом, соответствующим введённому числу.
+     * Если напоминание найдено, его идентификатор сохраняется во временное хранилище {@link #userPendingReminderId},
+     * состояние пользователя изменяется на {@link State#AWAITING_REMINDER_EDIT_ACTION},
+     * и возвращается сообщение с деталями напоминания и возможными действиями.
+     * </p>
+     *
+     * @param userId идентификатор пользователя (обычно Telegram ID или Discord ID)
+     * @param input  строка, содержащая номер напоминания
+     * @return строка с ответом для пользователя (успех или описание ошибки)
+     * @throws SQLException если произошла ошибка при работе с базой данных
+     */
     private String handleSelectReminderForAction(long userId, String input) throws SQLException {
         String login = userPendingLogin.get(userId);
         if (login == null) {
@@ -935,20 +1216,46 @@ public class BotLogic {
                 "Выберите действие:\n[Изменить текст]\n[Изменить дату/время]\n[Удалить]";
     }
 
+    /**
+     * Извлекает теги из текста в формате {@code #тег}.
+     * <p>
+     * Поддерживаемый формат: {@code #} + буквы/цифры/нижнее подчёркивание.
+     * Результат приводится к нижнему регистру, дубликаты удаляются.
+     * </p>
+     *
+     * @param text текст заметки
+     * @return список уникальных тегов в нижнем регистре
+     */
+
     private List<String> extractTagsFromText(String text) {
         List<String> tags = new ArrayList<>();
-        java.util.regex.Pattern pattern = java.util.regex.Pattern.compile("#[\\p{L}0-9_]+");
-        java.util.regex.Matcher matcher = pattern.matcher(text);
+        Pattern pattern = Pattern.compile("#[\\p{L}0-9_]+");
+        Matcher matcher = pattern.matcher(text);
         while (matcher.find()) {
             tags.add(matcher.group().toLowerCase());
         }
         return new ArrayList<>(new LinkedHashSet<>(tags));
     }
 
+    /**
+     * Удаляет все теги из текста заметки.
+     * <p>
+     * Удаляет подстроки, соответствующие шаблону {@code #тег}, и нормализует пробелы.
+     * </p>
+     *
+     * @param text исходный текст заметки
+     * @return текст без тегов
+     */
     private String removeTagsFromText(String text) {
         return text.replaceAll("#[\\p{L}0-9_]+", "").trim().replaceAll("\\s+", " ");
     }
 
+    /**
+     * Проверяет, является ли переданная строка корректным целым числом.
+     *
+     * @param str строка для проверки
+     * @return {@code true}, если строка представляет собой целое число; {@code false} в противном случае
+     */
     private boolean isNumeric(String str) {
         if (str == null || str.isEmpty()) return false;
         try {
