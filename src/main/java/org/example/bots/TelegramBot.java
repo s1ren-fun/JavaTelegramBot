@@ -17,13 +17,8 @@ import java.util.List;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * Telegram-бот, реализующий логику приёма обновлений (updates) и отправки ответов
- * через библиотеку telegrambots. Оборачивает и использует {@link BotLogic} для
- * обработки пользовательских команд и управления состояниями диалога.
- * <p>Класс регистрирует себя в {@code TelegramBotsApi} при вызове {@link #start()}
- * и обрабатывает входящие обновления в {@link #onUpdateReceived(Update)}.</p>
- * <p>Экземпляр класса хранит внутренний объект {@link BotLogic} и предоставляет
- * удобные методы для настройки клавиатуры ответов.</p>
+ * Класс, реализующий TelegramLongPollingBot и связывающий BotLogic с Telegram API.
+ * Теперь поддерживает inline-кнопки (через InlineButtonHandler).
  */
 public class TelegramBot extends TelegramLongPollingBot {
 
@@ -33,42 +28,40 @@ public class TelegramBot extends TelegramLongPollingBot {
     private final BotLogic logicBot = new BotLogic();
 
     /**
+     * Обработчик inline-кнопок (в т.ч. кнопки Отмена).
+     */
+    private final InlineButtonHandler inlineButtonHandler = new InlineButtonHandler();
+
+
+    /**
      * Инициализирует и регистрирует бота в Telegram API.
      * <p>Метод создаёт экземпляр {@link TelegramBotsApi} и регистрирует текущий бот. Для удержания
-     * потока работы приложения используется {@link java.util.concurrent.CountDownLatch},
-     * который ожидает бесконечно, пока не будет прерван.</p>
-     * @throws Exception если регистрация бота в TelegramBotsApi не удалась
+     * потока работы приложения используется {@link java.util.concurrent.CountDownLatch}
+     * (его задача — не позволить main() завершиться, чтобы бот продолжил работать).
      */
-    public void start() throws Exception {
-        TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
-        botsApi.registerBot(this);
-        CountDownLatch latch = new CountDownLatch(1);
+    public void start() {
         try {
+            TelegramBotsApi botsApi = new TelegramBotsApi(DefaultBotSession.class);
+            botsApi.registerBot(this);
+            CountDownLatch latch = new CountDownLatch(1);
             latch.await();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
-    /**
-     * Обрабатывает входящее обновление (update) от Telegram.
-     * <p>Поведение:</p>
-     * <ul>
-     * <li>Проверяет, что {@code update}, {@code update.getMessage()} и
-     * {@code update.getMessage().getText()} не равны {@code null}; в противном случае — ничего не делает.</li>
-     * <li>Извлекает {@code chatId}, {@code userId} и текст сообщения.</li>
-     * <li>Передаёт текст и идентификатор пользователя и получает ответную строку.</li>
-     * <li>Формирует {@link SendMessage} с ответом, вызывает {@link #setButtons(SendMessage, long)}
-     * для прикрепления клавиатуры, затем пытается выполнить отправку через
-     * {@link #execute(org.telegram.telegrambots.meta.api.methods.BotApiMethod)}.</li>
-     * <li>Все исключения логируются через {@code e.printStackTrace()} — метод не пробрасывает исключений наружу.</li>
-     * </ul>
-     * @param update входящее обновление от Telegram (может быть {@code null}, в этом случае метод ничего не делает).
-     */
     @Override
     public void onUpdateReceived(Update update) {
         try {
-            if (update == null || update.getMessage() == null || update.getMessage().getText() == null) return;
+            if (update == null) return;
+
+            if (update.hasCallbackQuery() && update.getCallbackQuery() != null) {
+                inlineButtonHandler.handleCallback(update.getCallbackQuery(), this, logicBot);
+                return;
+            }
+
+            if (update.getMessage() == null || update.getMessage().getText() == null) return;
+
             String chatId = String.valueOf(update.getMessage().getChatId());
             long userId = Long.parseLong(String.valueOf(update.getMessage().getFrom().getId()));
             String text = update.getMessage().getText();
@@ -88,38 +81,36 @@ public class TelegramBot extends TelegramLongPollingBot {
     }
 
     /**
-     * Устанавливает ReplyKeyboardMarkup (кнопочную клавиатуру) для сообщения
-     * {@code sendMessage} в зависимости от состояния пользователя.
-     * <p>Поведение:</p>
-     * <ul>
-     * <li>Создаёт {@link ReplyKeyboardMarkup} с resize/ selective флагами.</li>
-     * <li>Опрашивает текущее состояние пользователя через {@link BotLogic#getUserState(long)}.</li>
-     * <li>В зависимости от состояния ({@code AWAITING_ACTION_ON_NOTE},
-     * {@code AWAITING_NOTE_TEXT} или другое) формирует соответствующие строки
-     * клавиатуры с кнопками из {@link BotLogic.ButtonLabels}.</li>
-     * <li>Устанавливает сформированную клавиатуру в {@code sendMessage}.</li>
-     * </ul>
-     * <p>Метод объявлен {@code synchronized} для обеспечения потокобезопасного
-     * доступа при параллельной обработке update'ов и корректного чтения/использования состояния пользователя.</p>
-     * @param sendMessage объект сообщения, к которому будет прикреплена клавиатура; не должен быть {@code null}.
-     * @param userId идентификатор пользователя (используется для получения состояния).
+     * Устанавливает клавиатуру или inline-кнопки (в зависимости от состояния пользователя).
+     * Для некоторых состояний (например, ожидание ввода текста или выбор действия над заметкой)
+     * мы используем inline-кнопки (в том числе кнопку "Отмена"), которые появляются непосредственно
+     * под сообщением и обрабатываются в {@link InlineButtonHandler}.
+     *
+     * @param sendMessage сообщение, к которому нужно прикрепить разметку
+     * @param userId      идентификатор пользователя (для определения состояния)
      */
     public synchronized void setButtons(SendMessage sendMessage, long userId) {
+        BotLogic.State userState = logicBot.getUserState(userId);
+        if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE || userState == BotLogic.State.AWAITING_NOTE_TEXT) {
+            sendMessage.setReplyMarkup(inlineButtonHandler.createMarkupForState(userState));
+            return;
+        }
+
         ReplyKeyboardMarkup markup = new ReplyKeyboardMarkup();
         markup.setResizeKeyboard(true);
         markup.setSelective(true);
 
         List<KeyboardRow> keyboard = new ArrayList<>();
 
-        BotLogic.State userState = logicBot.getUserState(userId);
-
-        if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE) {
+        if (userState == BotLogic.State.AWAITING_NOTE_ID_FOR_REMINDER) {
             KeyboardRow row = new KeyboardRow();
-            row.add(new KeyboardButton(BotLogic.ButtonLabels.DELETE_NOTE));
-            row.add(new KeyboardButton(BotLogic.ButtonLabels.CONVERT_TO_REMINDER));
             row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
             keyboard.add(row);
-        } else if (userState == BotLogic.State.AWAITING_NOTE_TEXT) {
+        } else if (userState == BotLogic.State.AWAITING_REMINDER_TEXT) {
+            KeyboardRow row = new KeyboardRow();
+            row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+            keyboard.add(row);
+        } else if (userState == BotLogic.State.AWAITING_REMINDER_TIME) {
             KeyboardRow row = new KeyboardRow();
             row.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
             keyboard.add(row);
@@ -140,6 +131,25 @@ public class TelegramBot extends TelegramLongPollingBot {
 
         markup.setKeyboard(keyboard);
         sendMessage.setReplyMarkup(markup);
+    }
+
+    /**
+     * Удобный метод отправки сообщения с прикреплением клавиатуры, используя существующий setButtons.
+     *
+     * @param chatId чат, куда отправить
+     * @param text   текст сообщения
+     * @param userId id пользователя (нужен для выбора клавиатуры)
+     */
+    public void sendMessageWithButtons(String chatId, String text, long userId) {
+        SendMessage msg = new SendMessage();
+        msg.setChatId(chatId);
+        msg.setText(text);
+        setButtons(msg, userId);
+        try {
+            execute(msg);
+        } catch (TelegramApiException e) {
+            e.printStackTrace();
+        }
     }
 
     /**
