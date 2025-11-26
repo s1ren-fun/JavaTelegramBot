@@ -12,6 +12,7 @@ import net.dv8tion.jda.api.interactions.commands.build.Commands;
 
 import org.example.entity.Platform;
 import org.example.logic.BotLogic;
+import org.example.scheduler.NotificationSender;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.EnumSet;
@@ -21,7 +22,7 @@ import java.util.concurrent.CountDownLatch;
  * Простой Discord-бот на JDA, использующий {@link org.example.logic.BotLogic}
  * для обработки сообщений и slash-команд.
  */
-public class DiscordBot extends ListenerAdapter {
+public class DiscordBot extends ListenerAdapter implements NotificationSender {
     private final String token;
     private final BotLogic logicBot = new BotLogic();
     private JDA jda;
@@ -218,6 +219,41 @@ public class DiscordBot extends ListenerAdapter {
                 }
             }
         }).start();
+    }
+    @Override
+    public void sendDiscordNotification(Long userId, String message) {
+        if (jda == null) {
+            System.err.println("[DiscordBot] JDA не инициализирован, невозможно отправить сообщение пользователю: " + userId);
+            return;
+        }
+        if (userId == null) {
+            System.err.println("[DiscordBot] ID пользователя null, невозможно отправить сообщение.");
+            return;
+        }
+
+        System.out.println("[DiscordBot] Попытка отправить DM пользователю ID: " + userId);
+
+        jda.retrieveUserById(userId).queue(
+                user -> {
+                    System.out.println("[DiscordBot] Найден пользователь: " + user.getName() + " (" + user.getId() + ")");
+                    user.openPrivateChannel().queue(
+                            channel -> {
+                                System.out.println("[DiscordBot] Открыт DM канал для пользователя " + user.getName() + ", отправляем сообщение...");
+                                channel.sendMessage(message).queue(
+                                        msg -> System.out.println("[DiscordBot] Сообщение успешно отправлено в DM пользователю " + user.getName()),
+                                        failure -> System.err.println("[DiscordBot] Ошибка отправки сообщения в DM пользователю " + user.getName() + ": " + failure.getMessage())
+                                );
+                            },
+                            channelFailure -> System.err.println("[DiscordBot] Ошибка открытия DM канала для пользователя " + user.getName() + ": " + channelFailure.getMessage())
+                    );
+                },
+                userFailure -> System.err.println("[DiscordBot] Ошибка поиска пользователя по ID " + userId + ": " + userFailure.getMessage())
+        );
+    }
+
+    @Override
+    public void sendTelegramNotification(Long userId, String message) {
+        throw new UnsupportedOperationException("DiscordBot не может отправлять уведомления в Telegram.");
     }
 
     /**

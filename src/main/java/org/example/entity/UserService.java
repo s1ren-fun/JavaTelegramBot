@@ -49,4 +49,22 @@ public interface UserService {
      * @throws SQLException если произошла ошибка при работе с БД
      */
     User getUserByLogin(String login) throws SQLException;
+
+    /**
+     * Получает пользователя по Telegram ID.
+     *
+     * @param telegramId идентификатор в Telegram
+     * @return объект пользователя или null, если не найден
+     * @throws SQLException если произошла ошибка при работе с БД
+     */
+    User getUserByTelegramId(Long telegramId) throws SQLException;
+
+    /**
+     * Получает пользователя по Discord ID.
+     *
+     * @param discordId идентификатор в Discord
+     * @return объект пользователя или null, если не найден
+     * @throws SQLException если произошла ошибка при работе с БД
+     */
+    User getUserByDiscordId(Long discordId) throws SQLException;
 }

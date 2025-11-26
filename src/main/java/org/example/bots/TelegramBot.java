@@ -2,6 +2,7 @@ package org.example.bots;
 
 import org.example.entity.Platform;
 import org.example.logic.BotLogic;
+import org.example.scheduler.NotificationSender;
 import org.telegram.telegrambots.bots.TelegramLongPollingBot;
 import org.telegram.telegrambots.meta.TelegramBotsApi;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
@@ -25,7 +26,7 @@ import java.util.concurrent.CountDownLatch;
  * <p>Экземпляр класса хранит внутренний объект {@link BotLogic} и предоставляет
  * удобные методы для настройки клавиатуры ответов.</p>
  */
-public class TelegramBot extends TelegramLongPollingBot {
+public class TelegramBot extends TelegramLongPollingBot implements NotificationSender {
 
     /**
      * Экземпляр логики бота, используемый для обработки команд и состояний.
@@ -142,6 +143,22 @@ public class TelegramBot extends TelegramLongPollingBot {
         sendMessage.setReplyMarkup(markup);
     }
 
+    @Override
+    public void sendTelegramNotification(Long userId, String message) {
+        SendMessage msg = new SendMessage();
+        msg.setChatId(String.valueOf(userId));
+        msg.setText(message);
+        try {
+            execute(msg);
+        } catch (TelegramApiException e) {
+            throw new RuntimeException("Ошибка отправки в Telegram: " + e.getMessage(), e);
+        }
+    }
+
+    @Override
+    public void sendDiscordNotification(Long userId, String message) {
+        throw new UnsupportedOperationException("TelegramBot не может отправлять уведомления в Discord.");
+    }
     /**
      * Возвращает имя пользователя бота, используемое при регистрации.
      * @return имя пользователя бота

@@ -3,6 +3,7 @@ package org.example;
 import org.example.bots.TelegramBot;
 import org.example.bots.DiscordBot;
 import org.example.scheduler.ReminderScheduler;
+import org.example.scheduler.CompositeNotificationSender;
 import org.example.entity.*;
 
 /**
@@ -22,19 +23,16 @@ public class Main {
      *     <li>Discord-бота</li>
      *     <li>Планировщик напоминаний</li>
      * </ul>
-     * <p>
-     * Приложение ожидает завершения всех потоков.
-     * </p>
      *
      * @param args аргументы командной строки (не используются)
      */
     public static void main(String[] args) {
         ReminderService reminderService = new ReminderDatabaseService();
         UserService userService = new UserDatabaseService();
-
         TelegramBot telegramBot = new TelegramBot();
         DiscordBot discordBot = new DiscordBot();
-
+        CompositeNotificationSender notificationSender = new CompositeNotificationSender(telegramBot, discordBot);
+        ReminderScheduler scheduler = new ReminderScheduler(reminderService, userService, notificationSender);
         Thread discordThread = new Thread(() -> {
             try {
                 discordBot.start();
@@ -56,7 +54,6 @@ public class Main {
         Thread schedulerThread = new Thread(() -> {
             try {
                 Thread.sleep(5000);
-                ReminderScheduler scheduler = new ReminderScheduler(reminderService, userService, telegramBot, discordBot);
                 scheduler.start();
             } catch (Exception e) {
                 System.err.println("Reminder scheduler crashed:");
