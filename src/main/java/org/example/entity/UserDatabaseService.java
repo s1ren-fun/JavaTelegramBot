@@ -135,4 +135,46 @@ public class UserDatabaseService implements UserService {
             return null;
         }
     }
+
+    @Override
+    public User getUserByTelegramId(Long telegramId) throws SQLException {
+        String sql = "SELECT * FROM users WHERE telegram_id = ?";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setLong(1, telegramId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                String tzId = rs.getString("timezone");
+                ZoneId tz = tzId != null ? ZoneId.of(tzId) : ZoneId.of("UTC");
+                return new User(
+                        rs.getString("login"),
+                        rs.getLong("telegram_id") != 0 ? rs.getLong("telegram_id") : null,
+                        rs.getLong("discord_id") != 0 ? rs.getLong("discord_id") : null,
+                        tz
+                );
+            }
+            return null;
+        }
+    }
+
+    @Override
+    public User getUserByDiscordId(Long discordId) throws SQLException {
+        String sql = "SELECT * FROM users WHERE discord_id = ?";
+        try (Connection conn = DriverManager.getConnection(dbUrl);
+             PreparedStatement pstmt = conn.prepareStatement(sql)) {
+            pstmt.setLong(1, discordId);
+            ResultSet rs = pstmt.executeQuery();
+            if (rs.next()) {
+                String tzId = rs.getString("timezone");
+                ZoneId tz = tzId != null ? ZoneId.of(tzId) : ZoneId.of("UTC");
+                return new User(
+                        rs.getString("login"),
+                        rs.getLong("telegram_id") != 0 ? rs.getLong("telegram_id") : null,
+                        rs.getLong("discord_id") != 0 ? rs.getLong("discord_id") : null,
+                        tz
+                );
+            }
+            return null;
+        }
+    }
 }

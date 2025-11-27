@@ -1,12 +1,6 @@
 package org.example.scheduler;
 
-import org.example.entity.Reminder;
-import org.example.entity.User;
-import org.example.entity.ReminderService;
-import org.example.bots.TelegramBot;
-import org.example.bots.DiscordBot;
-import org.example.entity.UserService;
-import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
+import org.example.entity.*;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.Executors;
@@ -16,31 +10,29 @@ import java.util.concurrent.TimeUnit;
 /**
  * Планировщик напоминаний.
  * <p>
- * Проверяет каждую минуту, есть ли напоминания к отправке, и отправляет их в нужную платформу.
+ * Проверяет каждую минуту, есть ли напоминания к отправке, и отправляет их в нужную платформу
+ * через {@link NotificationSender}.
  * </p>
  *
- * @since 1.1
+ * @since 1.2
  */
 public class ReminderScheduler {
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private final ReminderService reminderService;
     private final UserService userService;
-    private final TelegramBot telegramBot;
-    private final DiscordBot discordBot;
+    private final NotificationSender notificationSender;
 
     /**
      * Создаёт экземпляр планировщика с указанными зависимостями.
      *
      * @param reminderService сервис для работы с напоминаниями
      * @param userService сервис для работы с пользователями
-     * @param telegramBot экземпляр Telegram-бота для отправки уведомлений
-     * @param discordBot экземпляр Discord-бота для отправки уведомлений
+     * @param notificationSender интерфейс для отправки уведомлений
      */
-    public ReminderScheduler(ReminderService reminderService, UserService userService, TelegramBot telegramBot, DiscordBot discordBot) {
+    public ReminderScheduler(ReminderService reminderService, UserService userService, NotificationSender notificationSender) {
         this.reminderService = reminderService;
         this.userService = userService;
-        this.telegramBot = telegramBot;
-        this.discordBot = discordBot;
+        this.notificationSender = notificationSender;
     }
 
     /**
@@ -50,7 +42,7 @@ public class ReminderScheduler {
      * </p>
      */
     public void start() {
-        scheduler.scheduleAtFixedRate(this::checkAndSendReminders, 0, 1, TimeUnit.MINUTES);
+        scheduler.scheduleAtFixedRate(this::checkAndSendReminders, 0, 20, TimeUnit.SECONDS);
     }
 
     /**
@@ -66,7 +58,7 @@ public class ReminderScheduler {
     /**
      * Проверяет и отправляет все просроченные напоминания.
      */
-    private void checkAndSendReminders() {
+    public void checkAndSendReminders() {
         try {
             List<Reminder> dueReminders = reminderService.getDueReminders(LocalDateTime.now());
             for (Reminder reminder : dueReminders) {
@@ -98,10 +90,7 @@ public class ReminderScheduler {
             if (user.getTelegramId() != null) {
                 System.out.println("Планировщик: Отправка напоминания в Telegram пользователю " + user.getTelegramId());
                 try {
-                    SendMessage msg = new SendMessage();
-                    msg.setChatId(String.valueOf(user.getTelegramId()));
-                    msg.setText(message);
-                    telegramBot.execute(msg);
+                    notificationSender.sendTelegramNotification(user.getTelegramId(), message);
                     sent = true;
                 } catch (Exception e) {
                     System.err.println("Ошибка отправки в Telegram пользователю " + user.getTelegramId() + ": " + e.getMessage());
@@ -111,7 +100,7 @@ public class ReminderScheduler {
             if (user.getDiscordId() != null) {
                 System.out.println("Планировщик: Отправка напоминания в Discord пользователю " + user.getDiscordId());
                 try {
-                    discordBot.sendPrivateMessage(user.getDiscordId(), message);
+                    notificationSender.sendDiscordNotification(user.getDiscordId(), message);
                     sent = true;
                 } catch (Exception e) {
                     System.err.println("Ошибка отправки в Discord пользователю " + user.getDiscordId() + ": " + e.getMessage());

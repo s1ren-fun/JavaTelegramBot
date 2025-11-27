@@ -700,7 +700,17 @@ public class BotLogic {
         }
 
         if (login == null) {
-            return "Вы не авторизованы. Используйте /start.";
+            User user = userService.getUserByTelegramId(userId);
+            if (user == null) {
+                user = userService.getUserByDiscordId(userId);
+            }
+
+            if (user != null) {
+                userPendingLogin.put(userId, user.getLogin());
+                login = user.getLogin();
+            } else {
+                return "Вы не авторизованы. Используйте /start.";
+            }
         }
 
         switch (input) {
