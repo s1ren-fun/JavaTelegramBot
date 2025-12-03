@@ -3,33 +3,17 @@ package org.example;
 import org.example.entity.*;
 import org.example.logic.BotLogic;
 import org.example.scheduler.ReminderScheduler;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.util.*;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 /**
- * ReminderBotTests — набор unit-тестов для проверки логики бота и поведения
- * моковых сервисов (MockNoteService, MockReminderService, MockUserService).
- * <p>
- * Тесты покрывают следующие сценарии:
- * </p>
- * <ul>
- * <li>Регистрация по логину;</li>
- * <li>Создание, редактирование, удаление и просмотр напоминаний;</li>
- * <li>Проверка отправки напоминаний планировщиком;</li>
- * <li>Валидация ввода даты/времени;</li>
- * <li>Проверка доступа к функциям без логина;</li>
- * <li>Конвертация заметки в напоминание.</li>
- * </ul>
+ * ReminderBotTests — набор unit-тестов для проверки напоминаний.
  *
- * <p>Тестовый класс содержит вложенные мок-классы, имитирующие поведение
- * реальных сервисов в памяти и используемые для изоляции тестируемой логики.</p>
  */
 public class ReminderBotTests {
 
@@ -78,7 +62,7 @@ public class ReminderBotTests {
      * Проверяет, что планировщик найдёт просроченное напоминание и получит пользователя с двумя ID.
      */
     @Test
-    public void addReminderFlow_SendsToBothPlatformsViaScheduler() throws SQLException {
+    public void addReminderFlow_SendsToBothPlatformsViaScheduler(){
         long userIdTelegram = 101L;
         long userIdDiscord = 202L;
         Platform tgPlatform = Platform.TELEGRAM;
@@ -105,7 +89,7 @@ public class ReminderBotTests {
 
         List<Reminder> userReminders = mockReminderService.getUserReminders(login);
         assertEquals(1, userReminders.size(), "Должно быть одно напоминание для пользователя");
-        assertEquals(reminderText, userReminders.get(0).getText(), "Текст напоминания должен совпадать");
+        assertEquals(reminderText, userReminders.getFirst().getText(), "Текст напоминания должен совпадать");
 
         LocalDateTime pastTime = LocalDateTime.now().minusMinutes(1);
         String pastReminderText = "Прошлое напоминание для проверки с заглушкой";
@@ -154,12 +138,12 @@ public class ReminderBotTests {
         mockUserService.registerUser(login, userId, null, null);
         mockReminderService.addReminder(login, "Удалить это", LocalDateTime.now().plusHours(1));
 
-        List<org.example.entity.Reminder> before = mockReminderService.getUserReminders(login);
+        List<Reminder> before = mockReminderService.getUserReminders(login);
         assertEquals(1, before.size());
 
         mockReminderService.deleteReminder(before.getFirst().getId());
 
-        List<org.example.entity.Reminder> after = mockReminderService.getUserReminders(login);
+        List<Reminder> after = mockReminderService.getUserReminders(login);
         assertEquals(0, after.size());
     }
 
@@ -176,7 +160,7 @@ public class ReminderBotTests {
         LocalDateTime pastTime = LocalDateTime.now().minusMinutes(1);
         mockReminderService.addReminder(login, "Просроченное напоминание", pastTime);
 
-        List<org.example.entity.Reminder> due = mockReminderService.getDueReminders(LocalDateTime.now());
+        List<Reminder> due = mockReminderService.getDueReminders(LocalDateTime.now());
         assertEquals(1, due.size());
         assertEquals("Просроченное напоминание", due.getFirst().getText());
     }
@@ -232,184 +216,5 @@ public class ReminderBotTests {
         List<String> notes = mockNoteService.getAllNotes(String.valueOf(userId));
         assertEquals(1, notes.size());
         assertEquals(noteText, notes.getFirst());
-    }
-    /**
-     * Тест: добавление заметки с тегом → тег извлекается и сохраняется.
-     */
-    @Test
-    public void addNoteWithTagsExtractsTags() {
-        long userId = 10L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "convert_user";
-
-        bot.handleCommand(userId, "/start",platform);
-        bot.handleCommand(userId, login,platform);
-        bot.handleCommand(userId, "Новая заметка",platform);
-        bot.handleCommand(userId, "Купить хлеб #продукты #список",platform);
-
-        List<String> tags = mockNoteService.getTagsForNote(mockNoteService.getNoteIdByIndex(login, 1));
-        Assertions.assertEquals(2, tags.size());
-        Assertions.assertTrue(tags.contains("#продукты"));
-        Assertions.assertTrue(tags.contains("#список"));
-    }
-
-    /**
-     * Тест: фильтрация заметок по тегу.
-     */
-    @Test
-    public void filterNotesByTag() {
-        long uid = 11L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "convert_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        mockNoteService.addNote(String.valueOf(uid), "Подготовить отчёт #работа");
-        mockNoteService.addNote(String.valueOf(uid), "Купить молоко #личное");
-        mockNoteService.addNote(String.valueOf(uid), "Идея для стартапа #идея #работа");
-
-        List<String> workNotes = mockNoteService.getNotesByTag(String.valueOf(uid), "#работа");
-        Assertions.assertEquals(2, workNotes.size());
-        Assertions.assertTrue(workNotes.contains("Подготовить отчёт #работа"));
-        Assertions.assertTrue(workNotes.contains("Идея для стартапа #идея #работа"));
-    }
-
-    /**
-     * Тест: получение списка всех тегов с количеством.
-     */
-    @Test
-    public void getAllUserTagsWithCounts(){
-        long uid = 12L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "convert_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        mockNoteService.addNote(String.valueOf(uid), "Заметка 1 #тег");
-        mockNoteService.addNote(String.valueOf(uid), "Заметка 2 #тег");
-        mockNoteService.addNote(String.valueOf(uid), "Заметка 3 #другой");
-
-        List<String> tagList = mockNoteService.getAllUserTagsWithCounts(String.valueOf(uid));
-        Assertions.assertEquals(2, tagList.size());
-        Assertions.assertTrue(tagList.contains("#тег — 2 заметки"));
-        Assertions.assertTrue(tagList.contains("#другой — 1 заметка"));
-    }
-
-    /**
-     * Тест: обновление заметки → теги перезаписываются.
-     */
-    @Test
-    public void updateNoteReplacesTags() {
-        long uid = 13L;
-
-        mockNoteService.addNote(String.valueOf(uid), "Старый текст #старый");
-        int noteId = mockNoteService.getNoteIdByIndex(String.valueOf(uid), 1);
-
-        mockNoteService.updateNote(String.valueOf(uid), noteId, "Новый текст #новый");
-
-        List<String> tags = mockNoteService.getTagsForNote(noteId);
-        Assertions.assertEquals(1, tags.size());
-        Assertions.assertEquals("#новый", tags.getFirst());
-        Assertions.assertFalse(tags.contains("#старый"));
-    }
-
-    /**
-     * Тест: удаление всех тегов (пустой список).
-     */
-    @Test
-    public void updateNoteWithNoTagsClearsTags()  {
-        long uid = 14L;
-        mockNoteService.addNote(String.valueOf(uid), "Текст с тегом #тег");
-        int noteId = mockNoteService.getNoteIdByIndex(String.valueOf(uid), 1);
-
-        mockNoteService.updateNote(String.valueOf(uid), noteId, "Текст без тегов");
-
-        List<String> tags = mockNoteService.getTagsForNote(noteId);
-        Assertions.assertTrue(tags.isEmpty());
-    }
-    
-    /**
-     * Тест: сценарий создания заметки — запрос текста, сохранение, проверка содержимого хранилища.
-     */
-    @Test
-    public void createNoteFlow() throws SQLException {
-        long uid = 2L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "not_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        Assertions.assertEquals("Отправьте текст заметки.", bot.handleCommand(uid, "Новая заметка",platform));
-        Assertions.assertEquals("Заметка сохранена!", bot.handleCommand(uid, "Текст заметки",platform));
-        List<String> notes = mockNoteService.getAllNotes(login);
-        Assertions.assertEquals(1, notes.size());
-        Assertions.assertEquals("Текст заметки", notes.get(0));
-    }
-    /**
-     * Тест: попытка редактировать несуществующую заметку должна вернуть сообщение об ошибке.
-     */
-    @Test
-    public void editNonexistentNoteShowsError() throws SQLException {
-        long uid = 3L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "edit_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        bot.handleCommand(uid, "Изменить заметку",platform);
-        String resp = bot.handleCommand(uid, "1",platform);
-        Assertions.assertEquals("Неизвестная команда. Используйте кнопки.", resp);
-    }
-    /**
-     * Тест: отмена удаления оставляет заметку в хранилище.
-     */
-    @Test
-    public void deleteCancelKeepsNote() throws SQLException {
-        long uid = 4L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "delete_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        mockNoteService.addNote(login, "не удалять");
-        bot.handleCommand(uid, "Изменить заметку",platform);
-        bot.handleCommand(uid, "1",platform);
-        bot.handleCommand(uid, "Удалить заметку",platform);
-        String resp = bot.handleCommand(uid, "нет",platform);
-        Assertions.assertEquals("Удаление отменено.", resp);
-        List<String> notes = mockNoteService.getAllNotes(login);
-        Assertions.assertEquals(1, notes.size());
-    }
-    /**
-     * Тест: попытка удаления несуществующей заметки возвращает сообщение об ошибке.
-     */
-    @Test
-    public void deleteNonexistentNoteShowsError() throws SQLException {
-        long uid = 5L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "errorDelete_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        bot.handleCommand(uid, "Удалить заметку",platform);
-        String resp = bot.handleCommand(uid, "10",platform);
-        Assertions.assertEquals("Неизвестная команда. Используйте кнопки.", resp);
-    }
-    /**
-     * Тест: вывод списка заметок корректно содержит все заметки с номерами.
-     */
-    @Test
-    public void multipleNotesListedCorrectly() throws SQLException {
-        long uid = 6L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "notes_user";
-
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        mockNoteService.addNote(login, "a");
-        mockNoteService.addNote(login, "b");
-        mockNoteService.addNote(login, "c");
-        String list = bot.handleCommand(uid, "Список заметок",platform);
-        Assertions.assertTrue(list.contains("1. a") && list.contains("2. b") && list.contains("3. c"));
     }
 }
