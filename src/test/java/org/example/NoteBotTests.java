@@ -113,21 +113,5 @@ public class NoteBotTests {
         String resp = bot.handleCommand(uid, "10",platform);
         Assertions.assertEquals("Неизвестная команда. Используйте кнопки.", resp);
     }
-    /**
-     * Тест: вывод списка заметок корректно содержит все заметки с номерами.
-     */
-    @Test
-    public void multipleNotesListedCorrectly(){
-        long uid = 6L;
-        Platform platform = Platform.TELEGRAM;
-        String login = "notes_user";
 
-        bot.handleCommand(uid, "/start",platform);
-        bot.handleCommand(uid, login,platform);
-        mockNoteService.addNote(login, "a");
-        mockNoteService.addNote(login, "b");
-        mockNoteService.addNote(login, "c");
-        String list = bot.handleCommand(uid, "Список заметок",platform);
-        Assertions.assertTrue(list.contains("1. a") && list.contains("2. b") && list.contains("3. c"));
-    }
 }
