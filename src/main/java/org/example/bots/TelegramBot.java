@@ -118,16 +118,24 @@ public class TelegramBot extends TelegramLongPollingBot implements NotificationS
         } else {
             KeyboardRow row1 = new KeyboardRow();
             row1.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_NOTE));
-            row1.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
+            row1.add(new KeyboardButton(BotLogic.ButtonLabels.SHARED_NOTE));
+
             KeyboardRow row2 = new KeyboardRow();
+            row2.add(new KeyboardButton(BotLogic.ButtonLabels.NOTES_LIST));
             row2.add(new KeyboardButton(BotLogic.ButtonLabels.FILTER_BY_TAG));
-            row2.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
+
             KeyboardRow row3 = new KeyboardRow();
+            row3.add(new KeyboardButton(BotLogic.ButtonLabels.EDIT_NOTE));
             row3.add(new KeyboardButton(BotLogic.ButtonLabels.NEW_REMINDER));
-            row3.add(new KeyboardButton(BotLogic.ButtonLabels.MY_REMINDERS));
+
+            KeyboardRow row4 = new KeyboardRow();
+            row4.add(new KeyboardButton(BotLogic.ButtonLabels.MY_REMINDERS));
+            row4.add(new KeyboardButton(BotLogic.ButtonLabels.CANCEL));
+
             keyboard.add(row1);
             keyboard.add(row2);
             keyboard.add(row3);
+            keyboard.add(row4);
         }
 
         markup.setKeyboard(keyboard);
