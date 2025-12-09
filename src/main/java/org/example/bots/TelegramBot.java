@@ -92,7 +92,10 @@ public class TelegramBot extends TelegramLongPollingBot implements NotificationS
      */
     public synchronized void setButtons(SendMessage sendMessage, long userId) {
         BotLogic.State userState = logicBot.getUserState(userId);
-        if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE || userState == BotLogic.State.AWAITING_NOTE_TEXT) {
+        if (userState == BotLogic.State.AWAITING_ACTION_ON_NOTE
+                || userState == BotLogic.State.AWAITING_NOTE_TEXT
+                || userState == BotLogic.State.AWAITING_SHARED_NOTE_ACCESS_ACTION
+                || userState == BotLogic.State.AWAITING_SHARED_NOTE_MANAGE_ACCESS) {
             sendMessage.setReplyMarkup(inlineButtonHandler.createMarkupForState(userState));
             return;
         }

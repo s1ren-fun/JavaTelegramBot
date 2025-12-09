@@ -278,6 +278,7 @@ public class BotLogic {
         public static final String FILTER_BY_TAG = "Фильтр по тегу";
         public static final String EDIT_TAGS = "Изменить теги";
         public static final String EDIT_NOTE = "Изменить заметку";
+        public static final String EDIT_NOTE_T = "Изменить текст";
         public static final String CANCEL = "Отмена";
         public static final String NEW_REMINDER = "Новое напоминание";
         public static final String MY_REMINDERS = "Мои напоминания";
