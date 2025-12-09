@@ -32,7 +32,9 @@ public class DiscordBot extends ListenerAdapter implements NotificationSender {
      * Извлекает токен бота из системного свойства {@code TOKEN_DISCORD}.
      * Если токен не задан, методы запуска бота выбросят исключение.
      */
-    public DiscordBot() { this.token =  System.getProperty("TOKEN_DISCORD");}
+    public DiscordBot() {
+        this.token =  System.getProperty("TOKEN_DISCORD");
+    }
 
     /**
      * Запускает JDA и регистрирует slash-команды.
